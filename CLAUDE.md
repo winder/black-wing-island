@@ -60,18 +60,29 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 ## Build & Test
 
-_Add your build and test commands here_
-
 ```bash
-# Example:
-# npm install
-# npm test
+npm install
+npm run dev        # play at http://localhost:5173
+npm test           # unit tests (vitest)
+npm run build      # typecheck + production build
+npm run island     # rebuild public/island/* and assets/island-preview.png from the drawing
+npx tsx tools/shot.ts out.png "x=..&z=..&y=..&yaw=..&pitch=..&mode=fly&time=0.5&third&map" [waitMs] [frames]
+                   # headless screenshot (needs `npm run dev` running); "title" for the title screen
 ```
+
+`?debug` in the URL skips the title screen and exposes `window.game`.
 
 ## Architecture Overview
 
-_Add a brief overview of your project architecture_
+*Black Wing Island*: a 3D first-person browser game (Three.js + TypeScript + Vite). Caitlin is the game designer.
+
+- `CONTEXT.md`: glossary and domain language. Use these terms in code.
+- `docs/adr/`: architecture decisions.
+- `assets/island-drawing.png`: Caitlin's drawing, the source of the island's coastline and biomes.
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+- `src/world/island.ts` `Island.ground(x, z)` is the single source of truth for terrain height, water, biome and coast. Everything that stands on the ground asks it.
+- World units are metres, y up, north = -z. One map pixel = 12.5 m.
+- The world is deterministic (fixed seed in `src/world/noise.ts`; scatter uses `hash2`). Don't use `Math.random()` for anything placed in the world.
+- Low-poly look: `flatShading: true`, vertex colours, models built from three.js primitives in code.
