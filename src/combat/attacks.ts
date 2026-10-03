@@ -158,9 +158,9 @@ export class ClawSwipe {
 
   get swinging() { return this.t < CLAW_SWING; }
 
-  update(dt: number, input: Input, player: Player, targets: Target[], onSwipe: () => void) {
+  update(dt: number, input: Input, player: Player, targets: Target[], onSwipe: () => void, allowed = true) {
     this.t += dt;
-    const ready = this.t > CLAW_COOLDOWN && !player.vitals.knockedOut;
+    const ready = allowed && this.t > CLAW_COOLDOWN && !player.vitals.knockedOut;
     if (ready && (input.wasClicked(2) || input.wasPressed('KeyF'))) {
       this.t = 0;
       this.side = -this.side;

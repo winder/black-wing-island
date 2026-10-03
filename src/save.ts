@@ -1,5 +1,6 @@
 // Three save slots in the browser's localStorage. Saving happens automatically.
 
+import type { PlacedBuilding } from './build/buildings';
 import type { PlayerState } from './player/player';
 
 export const SLOTS = 3;
@@ -14,6 +15,10 @@ export interface SaveData {
   /** Explored map pixels, one bit each, base64. */
   explored: string;
   exploredFraction: number;
+  // Added in Version 3 (older saves don't have these).
+  inventory?: { wood: number; stone: number; gold: number };
+  buildings?: PlacedBuilding[];
+  lastVillage?: { x: number; z: number };
 }
 
 export function packBits(bytes: Uint8Array): string {

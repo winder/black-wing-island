@@ -71,3 +71,18 @@ button.small { font-size: 14px; padding: 6px 12px; margin-left: 6px; background:
 .ko { position: absolute; inset: 0; display: grid; place-content: center; background: rgba(10, 6, 20, 0.6); transition: background 1.5s; }
 .ko.waking { background: rgba(10, 6, 20, 0.95); }
 .ko-text { font-size: 44px; text-align: center; padding: 0 24px; text-shadow: 0 3px 12px #000; }
+
+/* ---------- materials and building ---------- */
+.inventory { position: absolute; top: 16px; left: 16px; display: flex; gap: 14px; padding: 8px 14px; border-radius: 10px; background: rgba(20, 12, 24, 0.6); font-size: 20px; }
+.toasts { position: absolute; right: 24px; top: 40%; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.toast { font-size: 22px; text-shadow: 0 2px 6px #000; animation: toast 2.5s ease-out forwards; }
+@keyframes toast { 0% { opacity: 0; transform: translateX(20px); } 10% { opacity: 1; transform: none; } 75% { opacity: 1; } 100% { opacity: 0; transform: translateY(-20px); } }
+.build-menu { position: absolute; right: 16px; bottom: 90px; width: 300px; padding: 12px 16px; border-radius: 12px; background: rgba(20, 12, 24, 0.8); border: 2px solid rgba(243, 233, 210, 0.3); }
+.build-menu h3 { margin: 0 0 8px; font-size: 22px; }
+.build-menu .row { display: flex; gap: 10px; align-items: baseline; padding: 3px 0; }
+.build-menu .row b { display: inline-block; width: 22px; height: 22px; line-height: 22px; text-align: center; border-radius: 5px; background: var(--accent); }
+.build-menu .row span { margin-left: auto; font-size: 13px; opacity: 0.8; }
+.build-menu .row.poor { opacity: 0.45; }
+.build-menu p { margin: 8px 0 0; font-size: 13px; opacity: 0.8; }
+.build-menu p.good { color: #8dff9a; font-size: 16px; opacity: 1; }
+.build-menu p.bad { color: #ff8a80; font-size: 16px; opacity: 1; }

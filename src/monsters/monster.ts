@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { DamageKind, Target } from '../combat/attacks';
 import { HitSphere } from '../combat/hits';
 import { Player } from '../player/player';
-import { Island, VILLAGE_RADIUS } from '../world/island';
+import { Island } from '../world/island';
 import { Projectiles } from './projectiles';
 
 export type MonsterKind = 'snail' | 'wolf' | 'sandSnake' | 'yeti' | 'lavaWorm' | 'kraken';
@@ -19,6 +19,8 @@ export interface World {
   island: Island;
   player: Player;
   projectiles: Projectiles;
+  /** Every village (Home Village and Village Centers): monsters keep out. */
+  villages(): { x: number; z: number; r: number }[];
   /** Hurt the player, shoving them away from `from`. */
   hurtPlayer(amount: number, from: THREE.Vector3, shove: number): void;
   sound(name: 'roar' | 'hit' | 'bite' | 'splash', at: THREE.Vector3): void;
@@ -112,8 +114,7 @@ export abstract class Monster implements Target {
   /** Is the player somewhere this monster is allowed to chase them? */
   protected canChase(world: World, maxAltitude = Infinity) {
     const p = world.player.position;
-    const home = world.island.home;
-    if (Math.hypot(p.x - home.x, p.z - home.z) < VILLAGE_RADIUS * 1.2) return false;
+    if (world.villages().some((v) => Math.hypot(p.x - v.x, p.z - v.z) < v.r * 1.2)) return false;
     if (Math.hypot(p.x - this.home.x, p.z - this.home.z) > this.leash) return false;
     const ground = world.island.heightAt(p.x, p.z);
     return p.y - ground < maxAltitude && !world.player.vitals.knockedOut;
@@ -131,9 +132,8 @@ export abstract class Monster implements Target {
     const step = Math.min(d, speed * dt);
     const nx = this.position.x - Math.sin(this.heading) * step;
     const nz = this.position.z - Math.cos(this.heading) * step;
-    // Never walk into the Home Village.
-    const home = world.island.home;
-    if (Math.hypot(nx - home.x, nz - home.z) > VILLAGE_RADIUS * 1.15) {
+    // Never walk into a village.
+    if (!world.villages().some((v) => Math.hypot(nx - v.x, nz - v.z) < v.r * 1.15)) {
       this.position.x = nx;
       this.position.z = nz;
     }

@@ -28,9 +28,15 @@ const PLAN: { kind: MonsterKind; biome: Biome; count: number; spacing: number }[
   { kind: 'kraken', biome: Biome.Beach, count: 8, spacing: 250 },
 ];
 
+/** Gold a monster drops when defeated. */
+export const GOLD_DROP: Record<MonsterKind, number> = { snail: 2, wolf: 1, sandSnake: 3, yeti: 4, lavaWorm: 5, kraken: 5 };
+
 export class Dens {
   readonly group = new THREE.Group();
   readonly dens: Den[] = [];
+  /** Called once when a monster is defeated. */
+  onDefeated?: (m: Monster) => void;
+  private rewarded = new WeakSet<Monster>();
   private time = 0;
 
   constructor(private island: Island) {
@@ -108,7 +114,10 @@ export class Dens {
         }
         continue;
       }
-      for (const m of den.monsters) m.update(dt, world);
+      for (const m of den.monsters) {
+        m.update(dt, world);
+        if (!m.alive && !this.rewarded.has(m)) { this.rewarded.add(m); this.onDefeated?.(m); }
+      }
       // Defeated monsters vanish once their defeat animation is done.
       for (const m of den.monsters.filter((m) => m.finished)) this.remove(m);
       den.monsters = den.monsters.filter((m) => !m.finished);

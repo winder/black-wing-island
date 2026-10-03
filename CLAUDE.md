@@ -74,7 +74,7 @@ npx tsx tools/shot.ts out.png "x=..&z=..&y=..&yaw=..&pitch=..&mode=fly&time=0.5&
 [KEYS=KeyE] npx tsx tools/bench.ts [seconds] [query]   # frame-time benchmark on the real GPU (Radeon 780M via --use-angle=gl-egl)
 ```
 
-`?debug` in the URL skips the title screen and exposes `window.game`. Add `&spawn=wolf&dist=60` to put a monster (snail, wolf, sandSnake, yeti, lavaWorm, kraken) in front of the dragon. `PORT=5174` points `tools/shot.ts` at another dev server.
+`?debug` in the URL skips the title screen and exposes `window.game`. Add `&spawn=wolf&dist=60` to put a monster (snail, wolf, sandSnake, yeti, lavaWorm, kraken) in front of the dragon. `PORT=5174` points `tools/shot.ts` at another dev server. `&rich` gives 999 of every material; `&mouse` makes mouse clicks work without capturing the mouse (for headless tests).
 
 ## Architecture Overview
 

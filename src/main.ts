@@ -2,14 +2,19 @@
 
 import * as THREE from 'three';
 import { Sound } from './audio';
+import { BuildMode } from './build/buildMode';
+import { Buildings } from './build/buildings';
+import { Gathering } from './build/gathering';
+import { BUILDINGS, Inventory } from './build/inventory';
 import { ClawSwipe, FireBreath } from './combat/attacks';
 import { Input } from './input';
 import { Player, Mode } from './player/player';
-import { Dens } from './monsters/dens';
+import { Dens, GOLD_DROP } from './monsters/dens';
 import { Monster, MonsterKind, World } from './monsters/monster';
 import { Projectiles } from './monsters/projectiles';
 import { SLOTS, SaveData, clearSlot, loadSlot, packBits, unpackBits, writeSlot } from './save';
 import { CombatHud } from './ui/combatHud';
+import { InventoryHud } from './ui/inventoryHud';
 import { WorldMap } from './ui/map';
 import { Biome } from './world/biomes';
 import { Island } from './world/island';
@@ -58,11 +63,22 @@ const fire = new FireBreath(island);
 const claws = new ClawSwipe(camera);
 const projectiles = new Projectiles(island);
 const dens = new Dens(island);
-scene.add(sky.group, terrain.group, village.group, sheep.group, fire.object, fire.light, projectiles.group, dens.group);
+const inventory = new Inventory();
+const gathering = new Gathering(terrain, inventory, (harvested, tree) => {
+  if (harvested) sound.hit();
+  else if (tree) sound.whump(0.35);
+  else sound.hit();
+});
+const buildings = new Buildings(island, village, () => sound.whump(0.25));
+/** Where you wake up if knocked out: the last village you were in. */
+let lastVillage = { x: island.home.x, z: island.home.z };
+scene.add(sky.group, terrain.group, village.group, sheep.group, fire.object, fire.light, projectiles.group, dens.group,
+  gathering.group, buildings.group);
 
 // What monsters can do to the world.
 const world: World = {
   island, player, projectiles,
+  villages: () => buildings.villages(),
   hurtPlayer(amount, from, shove) {
     const before = player.vitals.health;
     player.vitals.hurt(amount);
@@ -94,7 +110,7 @@ ui.innerHTML = `
   <div id="hud" class="hidden">
     <div class="crosshair"></div>
     <div id="place" class="place"></div>
-    <div class="hint">Left mouse fire · Right mouse claws · M map · V view · Esc pause</div>
+    <div class="hint">Left mouse fire · Right mouse claws · B build · M map · V view · Esc pause</div>
     <div id="underwater" class="underwater hidden"></div>
   </div>
   <div id="pause" class="screen hidden">
@@ -109,6 +125,13 @@ const placeEl = document.querySelector<HTMLDivElement>('#place')!;
 const underwaterEl = document.querySelector<HTMLDivElement>('#underwater')!;
 const worldMap = new WorldMap(island, hudEl);
 const combatHud = new CombatHud(hudEl);
+const inventoryHud = new InventoryHud(hudEl);
+inventory.onGain = (m, n) => inventoryHud.gained(m, n);
+const buildMode = new BuildMode(scene, hudEl, island, inventory, buildings, (kind) => {
+  inventoryHud.toast(`Building a ${BUILDINGS[kind].name}!`);
+  save();
+});
+dens.onDefeated = (m) => inventory.add('gold', GOLD_DROP[m.kind]);
 let knockedOutFor = -1; // seconds since being knocked out, or -1
 
 // ---------- game state ----------
@@ -129,6 +152,9 @@ function save() {
     player: player.state,
     explored: packBits(worldMap.explored),
     exploredFraction: worldMap.exploredFraction,
+    inventory: inventory.state,
+    buildings: buildings.placed,
+    lastVillage,
   };
   writeSlot(slot, data);
   sinceSave = 0;
@@ -141,12 +167,19 @@ function startGame(s: number) {
     player.state = data.player;
     sky.time = data.timeOfDay;
     playSeconds = data.playSeconds;
+    inventory.state = data.inventory ?? { wood: 0, stone: 0, gold: 0 };
+    buildings.clear();
+    for (const b of data.buildings ?? []) buildings.add(b, true);
+    lastVillage = data.lastVillage ?? { x: island.home.x, z: island.home.z };
     worldMap.explored = unpackBits(data.explored, island.W * island.H);
   } else {
+    buildings.clear();
     // A new game starts in the Home Village, looking towards the mountains.
     player.placeAt(island.home.x, island.home.z + 40, 0.6);
     sky.time = 0.3;
     playSeconds = 0;
+    inventory.state = { wood: 0, stone: 0, gold: 0 };
+    lastVillage = { x: island.home.x, z: island.home.z };
     worldMap.explored = new Uint8Array(island.W * island.H);
   }
   // Build the ground nearby before showing anything.
@@ -189,7 +222,8 @@ function showTitle() {
     <div class="controls">
       <b>Mouse</b> look · <b>W A S D</b> move · <b>Shift</b> run / fly fast<br>
       <b>Space</b> take off / fly up · <b>C</b> fly down / dive · <b>V</b> see yourself · <b>M</b> map<br>
-      <b>Left mouse</b> (or <b>E</b>) breathe fire · <b>Right mouse</b> (or <b>F</b>) claw swipe
+      <b>Left mouse</b> (or <b>E</b>) breathe fire · <b>Right mouse</b> (or <b>F</b>) claw swipe<br>
+      Claw trees and rocks for <b>wood</b> and <b>stone</b> · <b>B</b> build
     </div>`;
   titleEl.querySelectorAll<HTMLButtonElement>('[data-play]').forEach((b) =>
     b.addEventListener('click', () => startGame(Number(b.dataset.play))));
@@ -234,7 +268,9 @@ if (params.has('debug')) {
     if (params.get('spawn') === 'kraken') ahead.y = 0;
     dens.spawnNear(params.get('spawn') as MonsterKind, ahead);
   }
-  (window as unknown as { game: unknown }).game = { island, player, terrain, sky, worldMap, renderer, dens, fire, claws, input };
+  input.forceLocked = params.has('mouse');
+  if (params.has('rich')) inventory.state = { wood: 999, stone: 999, gold: 999 };
+  (window as unknown as { game: unknown }).game = { island, player, terrain, sky, worldMap, renderer, dens, fire, claws, input, inventory, buildings, buildMode, gathering };
 } else {
   showTitle();
 }
@@ -255,11 +291,13 @@ function currentFoe(): Monster | null {
 function updateCombat(dt: number) {
   const v = player.vitals;
   const targets = dens.active;
-  const wantFire = (input.isMouseDown(0) || input.isDown('KeyE')) && !v.knockedOut;
+  const building = buildMode.usingMouse;
+  const wantFire = (input.isMouseDown(0) && !building || input.isDown('KeyE')) && !v.knockedOut;
   fire.update(dt, wantFire, player, targets);
   sound.fire(fire.breathing);
-  claws.update(dt, input, player, targets, () => sound.swish());
+  claws.update(dt, input, player, [...targets, ...gathering.targetsNear(player.position)], () => sound.swish(), !building || input.wasPressed('KeyF'));
   dens.update(dt, world);
+  buildings.update(dt, dens.active);
   projectiles.update(dt, player.center(), 4, (hit) => {
     world.hurtPlayer(hit.damage, hit.position, 14);
     if (hit.kind === 'snowball') sound.hit();
@@ -272,7 +310,8 @@ function updateCombat(dt: number) {
     knockedOutFor += dt;
     combatHud.knockedOut(knockedOutFor < 2.5 ? 0 : 1);
     if (knockedOutFor > 4.5) {
-      player.placeAt(island.home.x, island.home.z + 40, 0.6);
+      const home = lastVillage.x === island.home.x && lastVillage.z === island.home.z;
+      player.placeAt(lastVillage.x, lastVillage.z + (home ? 40 : 48), 0.6);
       v.revive();
       knockedOutFor = -1;
       combatHud.knockedOut(null);
@@ -289,7 +328,13 @@ renderer.setAnimationLoop(() => {
   if (playing && !paused) {
     if (input.wasPressed('KeyM')) worldMap.toggle();
     const wasSwimming = player.mode === 'swim';
+    buildMode.update(input, camera, player.position);
     player.update(dt, input);
+    buildings.pushOut(player.position);
+    gathering.update(dt);
+    const inVillage = buildings.villageAt(player.position.x, player.position.z);
+    if (inVillage) lastVillage = { x: inVillage.x, z: inVillage.z };
+    inventoryHud.update(inventory);
     if (player.mode === 'swim' && !wasSwimming) sound.splash();
     updateCombat(dt);
     playSeconds += dt;

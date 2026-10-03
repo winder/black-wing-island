@@ -31,7 +31,10 @@ export class Input {
     });
   }
 
-  get locked() { return document.pointerLockElement === this.canvas; }
+  /** Debug/testing only: act as if the mouse is captured. */
+  forceLocked = false;
+
+  get locked() { return this.forceLocked || document.pointerLockElement === this.canvas; }
   lock() { if (!this.locked) this.canvas.requestPointerLock()?.catch?.(() => {}); }
   unlock() { if (this.locked) document.exitPointerLock(); }
 

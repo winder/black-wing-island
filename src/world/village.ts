@@ -11,11 +11,13 @@ const VILLAGER_COLORS: [string, string][] = [
   ['#d35400', '#784212'], ['#8e44ad', '#f5b7b1'], ['#f4d03f', '#a04000'],
 ];
 
-interface Villager { model: DragonModel; target: THREE.Vector2; pause: number }
+interface Villager { model: DragonModel; target: THREE.Vector2; pause: number; home: { x: number; z: number; r: number }; added?: boolean }
 
 export class Village {
   readonly group = new THREE.Group();
   private villagers: Villager[] = [];
+  /** Things already standing in the Home Village (huts, the bonfire), so nothing gets built on top. */
+  readonly obstacles: { x: number; z: number; r: number }[] = [];
   private fire: THREE.PointLight;
   private flames: THREE.Mesh;
   private t = 0;
@@ -45,6 +47,7 @@ export class Village {
       door.position.set(0, 3.5, -9.6);
       hut.add(door);
       hut.position.set(x, y - 0.5, z);
+      this.obstacles.push({ x, z, r: 13 * size });
       hut.scale.setScalar(size);
       hut.lookAt(cx, y, cz);
       hut.rotateY(Math.PI);
@@ -53,6 +56,7 @@ export class Village {
 
     // Bonfire in a ring of stones.
     const y0 = island.heightAt(cx, cz);
+    this.obstacles.push({ x: cx, z: cz, r: 12 });
     for (let i = 0; i < 10; i++) {
       const a = (i / 10) * Math.PI * 2;
       const s = new THREE.Mesh(new THREE.DodecahedronGeometry(1.4, 0), stone);
@@ -76,13 +80,31 @@ export class Village {
       model.root.position.set(cx + Math.cos(a) * 30, y0, cz + Math.sin(a) * 30);
       model.pose(0, 0);
       this.group.add(model.root);
-      this.villagers.push({ model, target: this.pickSpot(), pause: hash2(i, 4, 9) * 5 });
+      const home = { x: cx, z: cz, r: VILLAGE_RADIUS - 50 };
+      this.villagers.push({ model, target: this.pickSpot(home), pause: hash2(i, 4, 9) * 5, home });
     }
   }
 
-  private pickSpot() {
-    const a = Math.random() * Math.PI * 2, r = 15 + Math.random() * (VILLAGE_RADIUS - 50);
-    return new THREE.Vector2(this.island.home.x + Math.cos(a) * r, this.island.home.z + Math.sin(a) * r);
+  private pickSpot(home: Villager['home']) {
+    const a = Math.random() * Math.PI * 2, r = 15 + Math.random() * home.r;
+    return new THREE.Vector2(home.x + Math.cos(a) * r, home.z + Math.sin(a) * r);
+  }
+
+  /** A new villager dragon moves in (when a House is built), wandering round its village. */
+  addVillager(at: { x: number; z: number }, village: { x: number; z: number; r: number }, seed: number) {
+    const [body, accent] = VILLAGER_COLORS[Math.abs(seed) % VILLAGER_COLORS.length];
+    const model = makeDragon(body, accent);
+    model.root.scale.setScalar(0.8 + hash2(seed, 3, 9) * 0.3);
+    model.root.position.set(at.x, this.island.heightAt(at.x, at.z), at.z);
+    model.pose(0, 0);
+    this.group.add(model.root);
+    this.villagers.push({ model, target: this.pickSpot(village), pause: 2, home: village, added: true });
+  }
+
+  /** Send away villagers who came with built Houses (when switching save slots). */
+  clearAdded() {
+    for (const v of this.villagers.filter((v) => v.added)) this.group.remove(v.model.root);
+    this.villagers = this.villagers.filter((v) => !v.added);
   }
 
   update(dt: number, nightness: number) {
@@ -98,7 +120,7 @@ export class Village {
       }
       const to = new THREE.Vector2(v.target.x - root.position.x, v.target.y - root.position.z);
       const d = to.length();
-      if (d < 2) { v.pause = 3 + Math.random() * 8; v.target = this.pickSpot(); return; }
+      if (d < 2) { v.pause = 3 + Math.random() * 8; v.target = this.pickSpot(v.home); return; }
       to.divideScalar(d);
       root.position.x += to.x * 3 * dt;
       root.position.z += to.y * 3 * dt;

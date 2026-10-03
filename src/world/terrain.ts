@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { Biome } from './biomes';
 import { Island } from './island';
 import { noise2 } from './noise';
-import { buildScatter } from './scatter';
+import { ScatterItem, buildScatter } from './scatter';
 
 export const CHUNK_SIZE = 256;
 const SKIRT = 25;
@@ -37,6 +37,7 @@ interface Chunk {
   cz: number;
   lod: number;
   group: THREE.Group;
+  items: ScatterItem[];
 }
 
 export class Terrain {
@@ -83,6 +84,28 @@ export class Terrain {
       this.group.add(chunk.group);
     }
     return wanted.length;
+  }
+
+  /** Trees and rocks within `r` metres of a point (only near the player, where they are built). */
+  itemsNear(x: number, z: number, r: number): ScatterItem[] {
+    const out: ScatterItem[] = [];
+    const c0x = Math.floor((x - r) / CHUNK_SIZE), c1x = Math.floor((x + r) / CHUNK_SIZE);
+    const c0z = Math.floor((z - r) / CHUNK_SIZE), c1z = Math.floor((z + r) / CHUNK_SIZE);
+    for (let cz = c0z; cz <= c1z; cz++) {
+      for (let cx = c0x; cx <= c1x; cx++) {
+        const chunk = this.chunks.get(`${cx},${cz}`);
+        if (!chunk) continue;
+        for (const it of chunk.items) {
+          if ((it.center.x - x) ** 2 + (it.center.z - z) ** 2 < r * r) out.push(it);
+        }
+      }
+    }
+    return out;
+  }
+
+  /** Every tree and rock in built chunks (for regrowing). */
+  allItems(): ScatterItem[] {
+    return [...this.chunks.values()].flatMap((c) => c.items);
   }
 
   private dispose(c: Chunk) {
@@ -195,8 +218,13 @@ export class Terrain {
       group.add(water);
     }
 
-    if (n >= 32) group.add(buildScatter(island, x0, z0, CHUNK_SIZE, n >= 64 ? 1 : 0.5));
-    return { cx, cz, lod: n, group };
+    let items: ScatterItem[] = [];
+    if (n >= 32) {
+      const scatter = buildScatter(island, x0, z0, CHUNK_SIZE, n >= 64 ? 1 : 0.5);
+      group.add(scatter.group);
+      items = scatter.items;
+    }
+    return { cx, cz, lod: n, group, items };
   }
 }
 

@@ -17,9 +17,9 @@ Caitlin is the game designer. Terms below are the shared language for the game; 
 | **Boss** | A giant version of a biome's monster (e.g. Yeti King, Great Lava Worm) at the end of each dungeon or monster castle. Beating it frees a trapped dragon or gives a lot of gold. |
 | **Monster Castle** | An old castle taken over by monsters, with a Boss holding a dragon prisoner. Once cleared, it belongs to the player. |
 | **Rescued Dragon** | Flies to the nearest village and lives there; may become a Quest Giver. |
-| **Village Center** | Placed first to start a new village; becomes a Respawn point. |
-| **House** | Village building; new dragons move in. |
-| **Wall / Tower** | Village buildings that protect the village. |
+| **Village Center** | Placed first to start a new village; becomes a Respawn point, and monsters keep away from the village. |
+| **House** | Village building; a new villager dragon moves in. |
+| **Wall / Tower** | Village buildings that protect the village. Towers shoot fire bolts at monsters nearby. |
 | **Castle (built)** | The biggest player build; needs Gold. |
 | **Power** | An upgrade (e.g. stronger Fire Breath, faster flying) given as a reward for big Quests. |
 | **Lake** | Inland water. The dragon can dive and swim underwater in lakes. |
@@ -43,8 +43,11 @@ Caitlin is the game designer. Terms below are the shared language for the game; 
 | **Knocked Out** | Health hit zero. Leads to a Respawn. |
 | **Den** | A fixed spot where a monster (or a wolf pack, or a Kraken) lives. Cleared dens refill after 5 minutes. |
 | **Claw Swipe** | Close-range attack. Right mouse (or F). |
-| **Respawn** | When health runs out, the Player Dragon wakes at their last village. Nothing is lost. |
-| **Materials** | Resources the player collects and spends to build. Starting set: **Wood** (claw down trees), **Stone** (smash rocks), **Gold** (found in caves and dungeons; needed for castles). |
+| **Respawn** | When health runs out, the Player Dragon wakes at their **last village** (the last one they were in). Nothing is lost. |
+| **Materials** | Resources the player collects and spends to build. **Wood** (claw down trees), **Stone** (smash rocks), **Gold** (dropped by defeated monsters, and found in rare **Gold Rocks** in the mountains; caves and dungeons later). Trees and rocks grow back after ~10 minutes. |
+| **Gold Rock** | A rare shiny rock in the mountains. Smash it for gold. |
+| **Build Mode** | B opens the build menu; a see-through **Ghost** shows where the building will go (green = OK, red = not here). Click to place. |
+| **Village** | Grows around a Village Center (or the Home Village). Houses, Walls and Towers must be built inside one. |
 | **Save Slot** | One of 3 saved games, picked on the title screen. Saves happen automatically every minute and after building. |
 | **Inventory** | Where collected Materials go, automatically. |
 | **Build Site** | A spot the player picks to place a building (e.g. a castle). |
