@@ -9,7 +9,8 @@ const browser = await chromium.launch({
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') console.log('console:', m.text()); });
 page.on('pageerror', (e) => console.log('pageerror:', e.message));
-await page.goto(query === "title" ? "http://localhost:5173/" : `http://localhost:5173/?debug&${query}`);
+const base = `http://localhost:${process.env.PORT ?? 5173}/`;
+await page.goto(query === "title" ? base : `${base}?debug&${query}`);
 await page.waitForTimeout(Number(wait));
 for (let f = 0; f < Number(frames); f++) {
   await page.screenshot({ path: Number(frames) > 1 ? out.replace(/\.png$/, `-${f}.png`) : out });

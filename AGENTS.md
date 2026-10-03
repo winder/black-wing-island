@@ -138,7 +138,7 @@ npx tsx tools/shot.ts out.png "x=..&z=..&y=..&yaw=..&pitch=..&mode=fly&time=0.5&
                    # headless screenshot (needs `npm run dev` running); "title" for the title screen
 ```
 
-`?debug` in the URL skips the title screen and exposes `window.game`.
+`?debug` in the URL skips the title screen and exposes `window.game`. Add `&spawn=wolf&dist=60` to put a monster (snail, wolf, sandSnake, yeti, lavaWorm, kraken) in front of the dragon. `PORT=5174` points `tools/shot.ts` at another dev server.
 
 ## Architecture Overview
 

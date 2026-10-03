@@ -2,9 +2,14 @@
 
 import * as THREE from 'three';
 import { Sound } from './audio';
+import { ClawSwipe, FireBreath } from './combat/attacks';
 import { Input } from './input';
 import { Player, Mode } from './player/player';
+import { Dens } from './monsters/dens';
+import { Monster, MonsterKind, World } from './monsters/monster';
+import { Projectiles } from './monsters/projectiles';
 import { SLOTS, SaveData, clearSlot, loadSlot, packBits, unpackBits, writeSlot } from './save';
+import { CombatHud } from './ui/combatHud';
 import { WorldMap } from './ui/map';
 import { Biome } from './world/biomes';
 import { Island } from './world/island';
@@ -49,7 +54,33 @@ const terrain = new Terrain(island);
 const village = new Village(island);
 const sheep = new SheepFlocks(island);
 const player = new Player(island, camera, scene);
-scene.add(sky.group, terrain.group, village.group, sheep.group);
+const fire = new FireBreath(island);
+const claws = new ClawSwipe(camera);
+const projectiles = new Projectiles(island);
+const dens = new Dens(island);
+scene.add(sky.group, terrain.group, village.group, sheep.group, fire.object, fire.light, projectiles.group, dens.group);
+
+// What monsters can do to the world.
+const world: World = {
+  island, player, projectiles,
+  hurtPlayer(amount, from, shove) {
+    const before = player.vitals.health;
+    player.vitals.hurt(amount);
+    if (shove > 0) {
+      const away = player.center().sub(from).setY(0).normalize().multiplyScalar(shove);
+      away.y = shove * 0.4;
+      player.knockback(away);
+      if (player.vitals.health < before) sound.hurt();
+    }
+  },
+  sound(name, at) {
+    if (at.distanceTo(player.position) > 400) return;
+    if (name === 'roar') sound.roar();
+    else if (name === 'bite') sound.bite();
+    else if (name === 'hit') sound.hit();
+    else sound.splash();
+  },
+};
 
 // The ocean: one big sheet of water that follows the player.
 const ocean = new THREE.Mesh(
@@ -63,7 +94,7 @@ ui.innerHTML = `
   <div id="hud" class="hidden">
     <div class="crosshair"></div>
     <div id="place" class="place"></div>
-    <div class="hint">M map · V view · Esc pause</div>
+    <div class="hint">Left mouse fire · Right mouse claws · M map · V view · Esc pause</div>
     <div id="underwater" class="underwater hidden"></div>
   </div>
   <div id="pause" class="screen hidden">
@@ -77,6 +108,8 @@ const pauseEl = document.querySelector<HTMLDivElement>('#pause')!;
 const placeEl = document.querySelector<HTMLDivElement>('#place')!;
 const underwaterEl = document.querySelector<HTMLDivElement>('#underwater')!;
 const worldMap = new WorldMap(island, hudEl);
+const combatHud = new CombatHud(hudEl);
+let knockedOutFor = -1; // seconds since being knocked out, or -1
 
 // ---------- game state ----------
 let slot = -1;
@@ -155,7 +188,8 @@ function showTitle() {
     </div>
     <div class="controls">
       <b>Mouse</b> look · <b>W A S D</b> move · <b>Shift</b> run / fly fast<br>
-      <b>Space</b> take off / fly up · <b>C</b> fly down / dive · <b>V</b> see yourself · <b>M</b> map
+      <b>Space</b> take off / fly up · <b>C</b> fly down / dive · <b>V</b> see yourself · <b>M</b> map<br>
+      <b>Left mouse</b> (or <b>E</b>) breathe fire · <b>Right mouse</b> (or <b>F</b>) claw swipe
     </div>`;
   titleEl.querySelectorAll<HTMLButtonElement>('[data-play]').forEach((b) =>
     b.addEventListener('click', () => startGame(Number(b.dataset.play))));
@@ -194,9 +228,57 @@ if (params.has('debug')) {
   hudEl.classList.remove('hidden');
   playing = true;
   if (params.has('map')) { worldMap.explored.fill(1); worldMap.toggle(); }
-  (window as unknown as { game: unknown }).game = { island, player, terrain, sky, worldMap, renderer };
+  if (params.has('spawn')) {
+    const ahead = player.position.clone().addScaledVector(player.lookDir().setY(0).normalize(), num('dist', 70));
+    ahead.y = island.heightAt(ahead.x, ahead.z);
+    if (params.get('spawn') === 'kraken') ahead.y = 0;
+    dens.spawnNear(params.get('spawn') as MonsterKind, ahead);
+  }
+  (window as unknown as { game: unknown }).game = { island, player, terrain, sky, worldMap, renderer, dens, fire, claws, input };
 } else {
   showTitle();
+}
+
+// ---------- fighting ----------
+
+/** The monster to show a health bar for: whoever you're fighting, nearest first. */
+function currentFoe(): Monster | null {
+  let best: Monster | null = null, bestD = Infinity;
+  for (const m of dens.active) {
+    if (!m.alive || !(m.aggro || m.sinceFight < 6)) continue;
+    const d = m.position.distanceTo(player.position);
+    if (d < 250 && d < bestD) { best = m; bestD = d; }
+  }
+  return best;
+}
+
+function updateCombat(dt: number) {
+  const v = player.vitals;
+  const targets = dens.active;
+  const wantFire = (input.isMouseDown(0) || input.isDown('KeyE')) && !v.knockedOut;
+  fire.update(dt, wantFire, player, targets);
+  sound.fire(fire.breathing);
+  claws.update(dt, input, player, targets, () => sound.swish());
+  dens.update(dt, world);
+  projectiles.update(dt, player.center(), 4, (hit) => {
+    world.hurtPlayer(hit.damage, hit.position, 14);
+    if (hit.kind === 'snowball') sound.hit();
+  });
+  v.update(dt, fire.breathing);
+
+  // Knocked out: wait a moment, then wake up in the last village with nothing lost.
+  if (v.knockedOut) {
+    if (knockedOutFor < 0) { knockedOutFor = 0; player.heldAt = null; }
+    knockedOutFor += dt;
+    combatHud.knockedOut(knockedOutFor < 2.5 ? 0 : 1);
+    if (knockedOutFor > 4.5) {
+      player.placeAt(island.home.x, island.home.z + 40, 0.6);
+      v.revive();
+      knockedOutFor = -1;
+      combatHud.knockedOut(null);
+    }
+  }
+  combatHud.update(v, currentFoe());
 }
 
 // ---------- the loop ----------
@@ -209,6 +291,7 @@ renderer.setAnimationLoop(() => {
     const wasSwimming = player.mode === 'swim';
     player.update(dt, input);
     if (player.mode === 'swim' && !wasSwimming) sound.splash();
+    updateCombat(dt);
     playSeconds += dt;
     sinceSave += dt;
     if (sinceSave > AUTOSAVE_SECONDS) save();

@@ -37,8 +37,12 @@ Caitlin is the game designer. Terms below are the shared language for the game; 
 | **Quest Giver** | A character in a village who hands out quests. |
 | **Animal** | A creature the player finds and raises. *Deferred, not in scope yet.* |
 | **Monster** | A hostile creature that fights back and can hurt the Player Dragon. **All monsters are giant**, sized to fight dragons. One type per biome: **Sand Snake** (desert), **Giant Snail** (meadow: slow and chill, fitting the starting biome), **Wolf** (forest), **Kraken** (beach and islands), **Yeti** (mountain), **Lava Worm** (volcano). |
-| **Fire Breath** | Ranged attack, aimed where the player looks. |
-| **Claw Swipe** | Close-range attack. |
+| **Fire Breath** | Ranged attack, aimed where the player looks. Hold left mouse (or E). Uses Fire. |
+| **Fire (meter)** | Drains while breathing fire, refills when you stop. Run dry and you must wait for a little to refill. |
+| **Health** | 100. Comes back on its own a few seconds after the last hit. At 0 you're **Knocked Out**. |
+| **Knocked Out** | Health hit zero. Leads to a Respawn. |
+| **Den** | A fixed spot where a monster (or a wolf pack, or a Kraken) lives. Cleared dens refill after 5 minutes. |
+| **Claw Swipe** | Close-range attack. Right mouse (or F). |
 | **Respawn** | When health runs out, the Player Dragon wakes at their last village. Nothing is lost. |
 | **Materials** | Resources the player collects and spends to build. Starting set: **Wood** (claw down trees), **Stone** (smash rocks), **Gold** (found in caves and dungeons; needed for castles). |
 | **Save Slot** | One of 3 saved games, picked on the title screen. Saves happen automatically every minute and after building. |

@@ -2,6 +2,7 @@
 // goes with it (first person by default, third person on V).
 
 import * as THREE from 'three';
+import { Vitals } from '../combat/vitals';
 import { Input } from '../input';
 import { Island } from '../world/island';
 import { makeDragon, DragonModel } from './dragonModel';
@@ -33,6 +34,9 @@ export class Player {
   flap = 0;
   flapRate = 0;
   readonly model: DragonModel;
+  readonly vitals = new Vitals();
+  /** While something (a Kraken tentacle) holds the dragon, it is dragged to this point and can't move. */
+  heldAt: THREE.Vector3 | null = null;
   private fpWings: DragonModel;
   private spread = 0;
 
@@ -77,6 +81,26 @@ export class Player {
     this.velocity.set(0, 0, 0);
   }
 
+  /** Where fire comes out: the front of the dragon's head. */
+  mouth(out = new THREE.Vector3()) {
+    const ahead = this.thirdPerson ? 5.5 : 5;
+    out.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).multiplyScalar(ahead).add(this.position);
+    out.y += this.mode === 'fly' ? 3.2 : 4.0;
+    return out;
+  }
+
+  /** The middle of the dragon's body, for things hitting it. */
+  center(out = new THREE.Vector3()) {
+    return out.copy(this.position).setY(this.position.y + 2.6);
+  }
+
+  /** Get shoved, e.g. by a monster's hit. */
+  knockback(push: THREE.Vector3) {
+    if (this.heldAt) return;
+    this.velocity.add(push);
+    if (this.mode === 'walk' && push.y > 0) this.position.y += 0.5;
+  }
+
   /** Direction the dragon is looking. */
   lookDir(out = new THREE.Vector3()) {
     return out.set(-Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.cos(this.yaw) * Math.cos(this.pitch));
@@ -94,6 +118,22 @@ export class Player {
       this.pitch = THREE.MathUtils.clamp(this.pitch - input.mouseDY * MOUSE_SENSITIVITY, -1.45, 1.45);
     }
     if (input.wasPressed('KeyV')) this.thirdPerson = !this.thirdPerson;
+
+    if (this.heldAt) {
+      // Grabbed: dragged along, can only look around and fight back.
+      this.position.lerp(this.heldAt, 1 - Math.exp(-6 * dt));
+      this.velocity.set(0, 0, 0);
+      this.mode = 'fly';
+      this.animate(dt);
+      this.placeCamera();
+      return;
+    }
+    if (this.vitals.knockedOut) {
+      this.velocity.multiplyScalar(Math.exp(-3 * dt));
+      this.animate(dt);
+      this.placeCamera();
+      return;
+    }
 
     const fwd = input.isDown('KeyW', 'ArrowUp') ? 1 : 0;
     const back = input.isDown('KeyS', 'ArrowDown') ? 1 : 0;

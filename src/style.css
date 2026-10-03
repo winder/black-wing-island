@@ -50,3 +50,24 @@ button.small { font-size: 14px; padding: 6px 12px; margin-left: 6px; background:
   border: 10px solid #6b4a2f; border-radius: 8px; box-shadow: 0 10px 40px var(--shadow);
   image-rendering: auto;
 }
+
+/* ---------- combat ---------- */
+.hurt-flash { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(200, 20, 10, 0.9) 100%); }
+.vitals { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; width: min(360px, 60vw); }
+.bar { position: relative; height: 18px; border-radius: 9px; background: rgba(20, 12, 24, 0.65); border: 2px solid rgba(243, 233, 210, 0.5); overflow: hidden; }
+.bar .fill { position: absolute; inset: 0; width: 100%; transition: width 0.15s; }
+.bar span { position: absolute; left: 10px; top: -1px; font-size: 13px; text-shadow: 0 1px 2px #000; }
+.bar.health .fill { background: linear-gradient(#e8524a, #a8231c); }
+.bar.health .fill.low { animation: pulse 0.8s infinite alternate; }
+.bar.fire { height: 12px; }
+.bar.fire span { font-size: 10px; top: -2px; }
+.bar.fire .fill { background: linear-gradient(#ffd25a, #ff7a1a); }
+.bar.fire.empty .fill { background: #7a5a4a; }
+@keyframes pulse { from { filter: brightness(1); } to { filter: brightness(1.6); } }
+.foe { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: min(480px, 70vw); text-align: center; }
+.foe-name { font-size: 22px; letter-spacing: 2px; margin-bottom: 4px; text-shadow: 0 2px 6px #000; }
+.foe .bar { height: 14px; }
+.foe .fill { background: linear-gradient(#b58bd6, #6a3a90); }
+.ko { position: absolute; inset: 0; display: grid; place-content: center; background: rgba(10, 6, 20, 0.6); transition: background 1.5s; }
+.ko.waking { background: rgba(10, 6, 20, 0.95); }
+.ko-text { font-size: 44px; text-align: center; padding: 0 24px; text-shadow: 0 3px 12px #000; }
