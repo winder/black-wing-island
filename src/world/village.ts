@@ -12,6 +12,11 @@ const VILLAGER_COLORS: [string, string][] = [
   ['#d35400', '#784212'], ['#8e44ad', '#f5b7b1'], ['#f4d03f', '#a04000'],
 ];
 
+/** A villager's scale colours (body, belly/wings), picked by seed. */
+export function villagerColors(seed: number): [string, string] {
+  return VILLAGER_COLORS[Math.abs(seed) % VILLAGER_COLORS.length];
+}
+
 interface Villager { model: DragonModel; target: THREE.Vector2; pause: number; home: { x: number; z: number; r: number }; added?: boolean; velocity: THREE.Vector3 }
 
 const VILLAGER_SPEED = 3;
@@ -97,15 +102,16 @@ export class Village {
     return new THREE.Vector2(home.x + Math.cos(a) * r, home.z + Math.sin(a) * r);
   }
 
-  /** A new villager dragon moves in (when a House is built), wandering round its village. */
+  /** A new villager dragon moves in (when a House is built, or a dragon is rescued), wandering round its village. */
   addVillager(at: { x: number; z: number }, village: { x: number; z: number; r: number }, seed: number) {
-    const [body, accent] = VILLAGER_COLORS[Math.abs(seed) % VILLAGER_COLORS.length];
+    const [body, accent] = villagerColors(seed);
     const model = makeDragon(body, accent);
     model.root.scale.setScalar(0.8 + hash2(seed, 3, 9) * 0.3);
     model.root.position.set(at.x, this.island.heightAt(at.x, at.z), at.z);
     model.update(0, { mode: 'walk', velocity: new THREE.Vector3(), yaw: 0 });
     this.group.add(model.root);
     this.villagers.push({ model, target: this.pickSpot(village), pause: 2, home: village, added: true, velocity: new THREE.Vector3() });
+    return model;
   }
 
   /** Send away villagers who came with built Houses (when switching save slots). */

@@ -48,7 +48,7 @@ export class Wolf extends Monster {
     this.collectMaterials();
   }
 
-  hitSpheres(): HitSphere[] {
+  protected body(): HitSphere[] {
     const fwd = new THREE.Vector3(-Math.sin(this.heading), 0, -Math.cos(this.heading));
     const base = this.group.position;
     return [

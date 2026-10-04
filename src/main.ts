@@ -20,6 +20,8 @@ import { Biome } from './world/biomes';
 import { Island } from './world/island';
 import { Places } from './places/places';
 import { Interiors } from './places/interiors';
+import { HOARD_GOLD, Lair, LairEvents, prisonerFor } from './places/lair';
+import { BOSS_GOLD } from './monsters/bosses';
 import { pushDragonOut } from './world/collide';
 import { SheepFlocks } from './world/sheep';
 import { Sky } from './world/sky';
@@ -76,6 +78,9 @@ const gathering = new Gathering(terrain, inventory, (harvested, tree) => {
 });
 const buildings = new Buildings(island, village, () => sound.whump(0.25));
 buildings.addSolid(places);
+buildings.moreVillages = () => places.villages();
+/** Dragons rescued from Monster Castles, and the village each went to live in. */
+let rescued: { place: string; village: { x: number; z: number; r: number } }[] = [];
 /** Where you wake up if knocked out: the last village you were in. */
 let lastVillage = { x: island.home.x, z: island.home.z };
 scene.add(sky.group, terrain.group, village.group, sheep.group, fire.object, fire.light, projectiles.group, dens.group,
@@ -130,17 +135,57 @@ const pauseEl = document.querySelector<HTMLDivElement>('#pause')!;
 const placeEl = document.querySelector<HTMLDivElement>('#place')!;
 const underwaterEl = document.querySelector<HTMLDivElement>('#underwater')!;
 // Going in and out of Interiors hides or shows the whole outside world.
-const outside = [terrain.group, village.group, sheep.group, dens.group, gathering.group, buildings.group, places.group, ocean, projectiles.group];
+const outside = [terrain.group, village.group, sheep.group, dens.group, gathering.group, buildings.group, places.group, ocean];
 const interiors = new Interiors(scene, ui, (inside) => {
   for (const o of outside) o.visible = !inside;
   sky.indoors = inside;
+  projectiles.island = inside ? interiors.current!.interior : island;
   if (inside) {
     const where = interiors.current!.place;
     showPlace(where.name.replace(/^the /, 'The '));
   } else currentBiome = null;
-});
+}, (place, interior) => new Lair(place, interior, world, { beaten: places.beaten.has(place.id), hoardTaken: places.hoards.has(place.id) }, lairEvents));
+
+/** A rescued dragon moves into the nearest village (not the castle it was rescued from). */
+function settleRescued(placeId: string, home: { x: number; z: number; r: number }) {
+  const place = places.list.find((p) => p.id === placeId)!;
+  const a = place.seed * 2.4;
+  village.addVillager({ x: home.x + Math.cos(a) * 30, z: home.z + Math.sin(a) * 30 }, home, prisonerFor(place).colorSeed);
+}
+
+const lairEvents: LairEvents = {
+  bossDefeated(place) {
+    places.beaten.add(place.id);
+    inventory.add('gold', BOSS_GOLD);
+    if (place.kind === 'castle') {
+      places.setOwned(place.id);
+      inventoryHud.toast(`${place.name} is yours now!`);
+    }
+    refreshMarkers();
+    save();
+  },
+  rescued(place) {
+    const others = buildings.villages().filter((v) => Math.hypot(v.x - place.x, v.z - place.z) > 1);
+    const home = others.reduce((a, b) => (Math.hypot(a.x - place.x, a.z - place.z) < Math.hypot(b.x - place.x, b.z - place.z) ? a : b));
+    rescued.push({ place: place.id, village: { x: home.x, z: home.z, r: home.r } });
+    settleRescued(place.id, home);
+    inventoryHud.toast(`${prisonerFor(place).name} flies off to live in ${home.name}.`);
+    save();
+  },
+  hoardTaken(place) {
+    places.hoards.add(place.id);
+    inventory.add('gold', HOARD_GOLD);
+    inventoryHud.toast(`The Gold Hoard of ${place.name.replace(/^the /, '')}!`);
+    save();
+  },
+  say(text) { inventoryHud.toast(text); },
+};
+
+function refreshMarkers() {
+  worldMap.markers = places.list.map((p) => ({ x: p.x, z: p.z, kind: p.kind, owned: places.isOwned(p.id) }));
+}
 const worldMap = new WorldMap(island, hudEl);
-worldMap.markers = places.list.map((p) => ({ x: p.x, z: p.z, kind: p.kind }));
+refreshMarkers();
 const combatHud = new CombatHud(hudEl);
 const inventoryHud = new InventoryHud(hudEl);
 inventory.onGain = (m, n) => inventoryHud.gained(m, n);
@@ -174,6 +219,8 @@ function save() {
     inventory: inventory.state,
     buildings: buildings.placed,
     lastVillage,
+    places: { owned: places.ownedIds, beaten: [...places.beaten], hoards: [...places.hoards] },
+    rescued,
   };
   writeSlot(slot, data);
   sinceSave = 0;
@@ -191,8 +238,16 @@ function startGame(s: number) {
     for (const b of data.buildings ?? []) buildings.add(b, true);
     lastVillage = data.lastVillage ?? { x: island.home.x, z: island.home.z };
     worldMap.explored = unpackBits(data.explored, island.W * island.H);
+    places.reset();
+    for (const id of data.places?.owned ?? []) places.setOwned(id);
+    for (const id of data.places?.beaten ?? []) places.beaten.add(id);
+    for (const id of data.places?.hoards ?? []) places.hoards.add(id);
+    rescued = data.rescued ?? [];
+    for (const r of rescued) settleRescued(r.place, r.village);
   } else {
     buildings.clear();
+    places.reset();
+    rescued = [];
     // A new game starts in the Home Village, looking towards the mountains.
     player.placeAt(island.home.x, island.home.z + 40, 0.6);
     sky.time = 0.3;
@@ -201,6 +256,7 @@ function startGame(s: number) {
     lastVillage = { x: island.home.x, z: island.home.z };
     worldMap.explored = new Uint8Array(island.W * island.H);
   }
+  refreshMarkers();
   // Build the ground nearby before showing anything.
   terrain.update(player.position.x, player.position.z, 1500);
   titleEl.classList.add('hidden');
@@ -296,10 +352,15 @@ if (params.has('debug')) {
 
 // ---------- fighting ----------
 
+/** Monsters you can fight here: a Boss inside, or the dens' monsters outside. */
+function foes(): Monster[] {
+  return interiors.current ? interiors.current.lair.monsters : dens.active;
+}
+
 /** The monster to show a health bar for: whoever you're fighting, nearest first. */
 function currentFoe(): Monster | null {
   let best: Monster | null = null, bestD = Infinity;
-  for (const m of dens.active) {
+  for (const m of foes()) {
     if (!m.alive || !(m.aggro || m.sinceFight < 6)) continue;
     const d = m.position.distanceTo(player.position);
     if (d < 250 && d < bestD) { best = m; bestD = d; }
@@ -309,7 +370,7 @@ function currentFoe(): Monster | null {
 
 function updateCombat(dt: number) {
   const v = player.vitals;
-  const targets = dens.active;
+  const targets = foes();
   const building = buildMode.usingMouse;
   const wantFire = (input.isMouseDown(0) && !building || input.isDown('KeyE')) && !v.knockedOut;
   fire.update(dt, wantFire, player, targets);
@@ -362,7 +423,7 @@ renderer.setAnimationLoop(() => {
     const wasSwimming = player.mode === 'swim';
     if (!inside) buildMode.update(input, camera, player.position);
     if (!interiors.busy) player.update(dt, input);
-    if (inside) pushDragonOut(player.position, player.yaw, inside.interior.colliders);
+    if (inside) pushDragonOut(player.position, player.yaw, [...inside.interior.colliders, ...inside.lair.colliders]);
     else buildings.pushOut(player.position, player.yaw);
     // Walk into a Portal to go in; back to the doorway to come out.
     if (!interiors.busy && !player.vitals.knockedOut) {

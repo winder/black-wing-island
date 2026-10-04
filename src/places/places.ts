@@ -66,6 +66,10 @@ export class Places {
   readonly list: Place[] = [];
   /** Castles that are yours now: they fly your banner. */
   private owned = new Set<string>();
+  /** Places whose Boss has been beaten. */
+  readonly beaten = new Set<string>();
+  /** Dungeons whose Gold Hoard has been taken. */
+  readonly hoards = new Set<string>();
   private models = new Map<string, THREE.Group>();
 
   constructor(private island: Island, avoid: { x: number; z: number }[]) {
@@ -156,6 +160,18 @@ export class Places {
   }
 
   get ownedIds() { return [...this.owned]; }
+
+  /** Won Monster Castles are villages: respawn points that monsters keep away from. */
+  villages() {
+    return this.list.filter((p) => this.owned.has(p.id)).map((p) => ({ x: p.x, z: p.z, r: 150, name: p.name }));
+  }
+
+  /** Forget all progress (a new game, or another save slot). */
+  reset() {
+    for (const id of [...this.owned]) this.setOwned(id, false);
+    this.beaten.clear();
+    this.hoards.clear();
+  }
 
   /** Everything solid about all places (for the dragon to bump into). */
   get colliders(): Collider[] { return this.list.flatMap((p) => p.colliders); }

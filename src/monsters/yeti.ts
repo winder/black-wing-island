@@ -58,7 +58,7 @@ export class Yeti extends Monster {
     this.collectMaterials();
   }
 
-  hitSpheres(): HitSphere[] {
+  protected body(): HitSphere[] {
     const b = this.position;
     return [
       { center: b.clone().setY(b.y + 16), radius: 7.5 },

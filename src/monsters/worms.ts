@@ -33,7 +33,15 @@ abstract class Burrower extends Monster {
     this.collectMaterials();
   }
 
-  hitSpheres(): HitSphere[] {
+  /** A Burrower Boss is fatter and longer rather than scaled (its segments live in world space). */
+  makeBoss(title: string, size: number, toughness: number) {
+    super.makeBoss(title, 1, toughness);
+    this.spacing *= size;
+    this.radii = this.radii.map((r) => r * size);
+    this.meshes.forEach((m) => m.scale.setScalar(size));
+  }
+
+  protected body(): HitSphere[] {
     if (this.state === 'under') return [];
     return this.segments.map((c, i) => ({ center: c, radius: this.radii[i] + 1 }));
   }

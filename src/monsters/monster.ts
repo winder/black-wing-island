@@ -5,7 +5,6 @@ import * as THREE from 'three';
 import { DamageKind, Target } from '../combat/attacks';
 import { HitSphere } from '../combat/hits';
 import { Player } from '../player/player';
-import { Island } from '../world/island';
 import { Projectiles } from './projectiles';
 
 export type MonsterKind = 'snail' | 'wolf' | 'sandSnake' | 'yeti' | 'lavaWorm' | 'kraken';
@@ -15,8 +14,11 @@ export const MONSTER_NAMES: Record<MonsterKind, string> = {
   yeti: 'Giant Yeti', lavaWorm: 'Giant Lava Worm', kraken: 'Giant Kraken',
 };
 
+/** Something monsters can stand on: the Island, or an Interior's floor. */
+export interface Floor { heightAt(x: number, z: number): number }
+
 export interface World {
-  island: Island;
+  island: Floor;
   player: Player;
   projectiles: Projectiles;
   /** Every village (Home Village and Village Centers): monsters keep out. */
@@ -37,6 +39,10 @@ export abstract class Monster implements Target {
   readonly position = new THREE.Vector3();
   heading = 0;
   health: number;
+  /** Bosses are bigger: the model, its reach, its speed and where it can be hit all grow. */
+  size = 1;
+  /** A Boss's own name (e.g. "Snail King"). */
+  title?: string;
   /** How much each kind of attack hurts this monster (1 = normal). */
   protected resist: Record<DamageKind, number> = { fire: 1, claw: 1 };
   /** Set while angry at the player. */
@@ -49,13 +55,21 @@ export abstract class Monster implements Target {
   private materials: THREE.MeshLambertMaterial[] = [];
   private baseEmissive: { color: THREE.Color; intensity: number }[] = [];
 
-  constructor(readonly maxHealth: number, readonly home: THREE.Vector3, protected leash: number) {
+  constructor(public maxHealth: number, readonly home: THREE.Vector3, protected leash: number) {
     this.health = maxHealth;
     this.position.copy(home);
   }
 
   get alive() { return this.health > 0; }
-  get name() { return MONSTER_NAMES[this.kind]; }
+  get name() { return this.title ?? MONSTER_NAMES[this.kind]; }
+
+  /** Turn this monster into a Boss: `size` times bigger and `toughness` times the health. */
+  makeBoss(title: string, size: number, toughness: number) {
+    this.title = title;
+    this.size = size;
+    this.maxHealth = this.health = this.maxHealth * toughness;
+    this.leash = Infinity;
+  }
   /** Fully gone and can be removed from the scene. */
   get finished() { return !this.alive && this.sinceDefeat > 4; }
 
@@ -69,7 +83,17 @@ export abstract class Monster implements Target {
     });
   }
 
-  abstract hitSpheres(): HitSphere[];
+  /** Where the monster can be hit, at its normal size. */
+  protected abstract body(): HitSphere[];
+
+  hitSpheres(): HitSphere[] {
+    const spheres = this.body();
+    if (this.size === 1) return spheres;
+    return spheres.map((h) => ({
+      center: h.center.clone().sub(this.position).multiplyScalar(this.size).add(this.position),
+      radius: h.radius * this.size,
+    }));
+  }
 
   takeHit(amount: number, kind: DamageKind, _from: THREE.Vector3, _sphere = 0) {
     if (!this.alive) return;
@@ -107,8 +131,9 @@ export abstract class Monster implements Target {
 
   // ---------- helpers for subclasses ----------
 
+  /** How far away the player is, measured in this monster's own size (so a Boss reaches further). */
   protected distanceToPlayer(world: World) {
-    return this.position.distanceTo(world.player.center());
+    return this.position.distanceTo(world.player.center()) / this.size;
   }
 
   /** Is the player somewhere this monster is allowed to chase them? */
@@ -129,7 +154,7 @@ export abstract class Monster implements Target {
     let diff = want - this.heading;
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
     this.heading += THREE.MathUtils.clamp(diff, -turnRate * dt, turnRate * dt);
-    const step = Math.min(d, speed * dt);
+    const step = Math.min(d, speed * (0.6 + 0.4 * this.size) * dt);
     const nx = this.position.x - Math.sin(this.heading) * step;
     const nz = this.position.z - Math.cos(this.heading) * step;
     // Never walk into a village.
@@ -151,5 +176,6 @@ export abstract class Monster implements Target {
   protected placeModel() {
     this.group.position.copy(this.position);
     this.group.rotation.y = this.heading;
+    this.group.scale.setScalar(this.size);
   }
 }

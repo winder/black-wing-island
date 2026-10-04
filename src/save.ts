@@ -19,6 +19,9 @@ export interface SaveData {
   inventory?: { wood: number; stone: number; gold: number };
   buildings?: PlacedBuilding[];
   lastVillage?: { x: number; z: number };
+  // Added in Version 4.
+  places?: { owned: string[]; beaten: string[]; hoards: string[] };
+  rescued?: { place: string; village: { x: number; z: number; r: number } }[];
 }
 
 export function packBits(bytes: Uint8Array): string {

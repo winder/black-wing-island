@@ -40,7 +40,7 @@ export class Snail extends Monster {
     this.collectMaterials();
   }
 
-  hitSpheres(): HitSphere[] {
+  protected body(): HitSphere[] {
     const fwd = new THREE.Vector3(-Math.sin(this.heading), 0, -Math.cos(this.heading));
     return [
       { center: this.position.clone().setY(this.position.y + 8).addScaledVector(fwd, -2.5), radius: 7 },

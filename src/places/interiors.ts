@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { Interior } from './interior';
+import type { Lair } from './lair';
 import { BIOME_STONE, Place } from './places';
 
 const FADE_SECONDS = 0.45;
@@ -11,7 +12,7 @@ const TORCH_LIGHTS = 5;
 
 export class Interiors {
   /** The Interior you're in, and which place it belongs to. */
-  current: { place: Place; interior: Interior } | null = null;
+  current: { place: Place; interior: Interior; lair: Lair } | null = null;
   /** Set while fading; the player shouldn't move. */
   busy = false;
   /** Where you come back out: in front of the place's doorway, facing away from it. */
@@ -21,7 +22,10 @@ export class Interiors {
   private lights: THREE.PointLight[] = [];
   private t = 0;
 
-  constructor(private scene: THREE.Scene, ui: HTMLElement, private onSwap: (inside: boolean) => void) {
+  constructor(
+    private scene: THREE.Scene, ui: HTMLElement, private onSwap: (inside: boolean) => void,
+    private makeLair: (place: Place, interior: Interior) => Lair,
+  ) {
     this.fade = document.createElement('div');
     this.fade.className = 'fade';
     ui.appendChild(this.fade);
@@ -43,8 +47,9 @@ export class Interiors {
     this.back.pos.copy(place.portal).addScaledVector(out, 20);
     this.back.yaw = place.rot;
     const interior = new Interior(place.seed, place.kind === 'castle' ? 'castle' : 'dungeon', BIOME_STONE[place.biome]);
-    this.scene.add(interior.group);
-    this.current = { place, interior };
+    const lair = this.makeLair(place, interior);
+    this.scene.add(interior.group, lair.group);
+    this.current = { place, interior, lair };
     player.enterIndoors(interior, interior.arrive, interior.arriveYaw);
     this.onSwap(true);
     await this.fadeTo(0);
@@ -55,8 +60,9 @@ export class Interiors {
     if (this.busy || !this.current) return;
     this.busy = true;
     await this.fadeTo(1);
-    this.scene.remove(this.current.interior.group);
+    this.scene.remove(this.current.interior.group, this.current.lair.group);
     this.current.interior.dispose();
+    this.current.lair.dispose();
     this.current = null;
     const dest = to ?? this.back;
     player.enterIndoors(null, dest.pos, dest.yaw);
@@ -70,6 +76,7 @@ export class Interiors {
   update(dt: number, at: THREE.Vector3) {
     this.t += dt;
     if (!this.current) return;
+    if (!this.busy) this.current.lair.update(dt, at);
     const torches = [...this.current.interior.torches].sort((a, b) => a.distanceToSquared(at) - b.distanceToSquared(at));
     this.lights.forEach((l, i) => {
       const p = torches[i];

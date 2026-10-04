@@ -65,6 +65,8 @@ export class Buildings {
   constructor(private island: Island, private village: Village, private onPiece: () => void) {}
 
   addSolid(source: { colliders: Collider[]; obstacles: { x: number; z: number; r: number }[] }) { this.others.push(source); }
+  /** Other villages (won Monster Castles). */
+  moreVillages: () => VillageSpot[] = () => [];
 
   get placed(): PlacedBuilding[] {
     return this.list.map(({ kind, seed, x, z, rot }) => ({ kind, seed, x, z, rot }));
@@ -75,6 +77,7 @@ export class Buildings {
     return [
       { x: this.island.home.x, z: this.island.home.z, r: VILLAGE_RADIUS, name: 'the Home Village' },
       ...this.list.filter((b) => b.kind === 'villageCenter').map((b) => ({ x: b.x, z: b.z, r: VILLAGE_REACH, name: 'your village' })),
+      ...this.moreVillages(),
     ];
   }
 

@@ -73,7 +73,13 @@ export class Kraken extends Monster {
     this.collectMaterials();
   }
 
-  hitSpheres(): HitSphere[] {
+  /** A Kraken Boss doesn't grow; its tentacles get tougher instead. */
+  makeBoss(title: string, _size: number, toughness: number) {
+    super.makeBoss(title, 1, toughness);
+    for (const t of this.tentacles) t.health *= toughness;
+  }
+
+  protected body(): HitSphere[] {
     const out: HitSphere[] = [];
     for (const t of this.tentacles) {
       t.points.forEach((p, s) => out.push({ center: p, radius: 4 * (1 - (s / SEGMENTS) * 0.6) }));

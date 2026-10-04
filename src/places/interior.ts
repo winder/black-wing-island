@@ -276,6 +276,8 @@ export class Interior implements Indoors {
   }
 
   floorAt() { return ORIGIN.y; }
+  /** For monsters standing in here (a `Floor`). */
+  heightAt() { return ORIGIN.y; }
 
   ceilingAt(x: number, z: number) {
     const { i, j, open } = this.cellOf(x, z);

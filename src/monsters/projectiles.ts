@@ -1,7 +1,7 @@
 // Things monsters throw or spit: Yeti snowballs and Lava Worm lava blobs.
 
 import * as THREE from 'three';
-import { Island } from '../world/island';
+import type { Floor } from './monster';
 
 export type ProjectileKind = 'snowball' | 'lava';
 
@@ -20,7 +20,8 @@ export class Projectiles {
   readonly group = new THREE.Group();
   private list: Projectile[] = [];
 
-  constructor(private island: Island) {}
+  /** What thrown things land on: the Island, or an Interior's floor. */
+  constructor(public island: Floor) {}
 
   /** Throw something from `from` so that it lands on `target`, flying for about `time` seconds. */
   launch(kind: ProjectileKind, from: THREE.Vector3, target: THREE.Vector3, time: number, damage: number) {
