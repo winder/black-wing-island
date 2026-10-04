@@ -23,6 +23,10 @@ import { Caves } from './places/caves';
 import { Interiors } from './places/interiors';
 import { HOARD_GOLD, Lair, LairEvents, prisonerFor } from './places/lair';
 import { BOSS_GOLD } from './monsters/bosses';
+import { Quest, QuestState, Quests, rewardText } from './quests/quests';
+import { ACCESSORIES, AccessoryId, POWERS, Rewards } from './quests/rewards';
+import { Giver, QuestGivers } from './quests/givers';
+import type { DragonModel } from './player/dragonModel';
 import { pushDragonOut } from './world/collide';
 import { SheepFlocks } from './world/sheep';
 import { Sky } from './world/sky';
@@ -30,6 +34,7 @@ import { Terrain } from './world/terrain';
 import { Village } from './world/village';
 
 const AUTOSAVE_SECONDS = 60;
+const NO_QUESTS: QuestState = { active: null, done: [], boards: {} };
 const BIOME_NAMES: Record<Biome, string> = {
   [Biome.Ocean]: 'The Ocean', [Biome.Meadow]: 'The Meadow', [Biome.Forest]: 'The Forest',
   [Biome.Desert]: 'The Desert', [Biome.Mountain]: 'The Mountains', [Biome.Volcano]: 'The Volcano',
@@ -85,6 +90,8 @@ buildings.addSolid(places);
 buildings.moreVillages = () => places.villages();
 /** Dragons rescued from Monster Castles, and the village each went to live in. */
 let rescued: { place: string; village: { x: number; z: number; r: number } }[] = [];
+/** Rescued dragons' models, so they can give quests. */
+const rescuedModels = new Map<string, DragonModel>();
 /** Where you wake up if knocked out: the last village you were in. */
 let lastVillage = { x: island.home.x, z: island.home.z };
 scene.add(sky.group, terrain.group, village.group, sheep.group, fire.object, fire.light, projectiles.group, dens.group,
@@ -125,7 +132,7 @@ ui.innerHTML = `
   <div id="hud" class="hidden">
     <div class="crosshair"></div>
     <div id="place" class="place"></div>
-    <div class="hint">Left mouse fire · Right mouse claws · B build · M map · V view · Esc pause</div>
+    <div class="hint">Mouse fire / claws · T talk · B build · M map · I treasures · V view · Esc pause</div>
     <div id="underwater" class="underwater hidden"></div>
   </div>
   <div id="pause" class="screen hidden">
@@ -147,6 +154,7 @@ const interiors = new Interiors(scene, ui, (inside) => {
   if (inside) {
     const where = interiors.current!.place;
     showPlace(where.name.replace(/^the /, 'The '));
+    quests.visited(where.id);
   } else currentBiome = null;
 }, (place, interior) => new Lair(place, interior, world, { beaten: places.beaten.has(place.id), hoardTaken: places.hoards.has(place.id) }, lairEvents));
 
@@ -154,12 +162,13 @@ const interiors = new Interiors(scene, ui, (inside) => {
 function settleRescued(placeId: string, home: { x: number; z: number; r: number }) {
   const place = places.list.find((p) => p.id === placeId)!;
   const a = place.seed * 2.4;
-  village.addVillager({ x: home.x + Math.cos(a) * 30, z: home.z + Math.sin(a) * 30 }, home, prisonerFor(place).colorSeed);
+  rescuedModels.set(placeId, village.addVillager({ x: home.x + Math.cos(a) * 30, z: home.z + Math.sin(a) * 30 }, home, prisonerFor(place).colorSeed));
 }
 
 const lairEvents: LairEvents = {
-  bossDefeated(place) {
+  bossDefeated(place, boss) {
     places.beaten.add(place.id);
+    quests.defeated(boss.kind);
     inventory.add('gold', BOSS_GOLD);
     if (place.kind === 'castle') {
       places.setOwned(place.id);
@@ -172,6 +181,7 @@ const lairEvents: LairEvents = {
     const others = buildings.villages().filter((v) => Math.hypot(v.x - place.x, v.z - place.z) > 1);
     const home = others.reduce((a, b) => (Math.hypot(a.x - place.x, a.z - place.z) < Math.hypot(b.x - place.x, b.z - place.z) ? a : b));
     rescued.push({ place: place.id, village: { x: home.x, z: home.z, r: home.r } });
+    quests.rescued(place.id);
     settleRescued(place.id, home);
     inventoryHud.toast(`${prisonerFor(place).name} flies off to live in ${home.name}.`);
     save();
@@ -179,11 +189,65 @@ const lairEvents: LairEvents = {
   hoardTaken(place) {
     places.hoards.add(place.id);
     inventory.add('gold', HOARD_GOLD);
+    const scales = HOARD_SCALES[place.id];
+    if (scales) { rewards.grantAccessory(scales); inventoryHud.toast(`You found ${ACCESSORIES[scales].name}!`); }
     inventoryHud.toast(`The Gold Hoard of ${place.name.replace(/^the /, '')}!`);
     save();
   },
   say(text) { inventoryHud.toast(text); },
 };
+
+// ---------- quests and rewards ----------
+const rewards = new Rewards();
+const quests = new Quests({
+  home: island.home,
+  places: places.list.map((p) => ({ id: p.id, name: p.name, x: p.x, z: p.z })),
+  caves: caves.list.map((c) => ({ id: c.id, x: c.mouth.x, z: c.mouth.z })),
+  prisoner: (id) => prisonerFor(places.list.find((p) => p.id === id)!).name,
+});
+const rewardNames = { power: (p: keyof typeof POWERS) => POWERS[p].name, accessory: (a: AccessoryId) => ACCESSORIES[a].name };
+quests.onComplete = (q: Quest) => {
+  const r = q.reward;
+  if (r.wood) inventory.add('wood', r.wood);
+  if (r.stone) inventory.add('stone', r.stone);
+  if (r.gold) inventory.add('gold', r.gold);
+  if (r.power) { rewards.grantPower(r.power); showPlace(`Power: ${POWERS[r.power].name}!`); }
+  if (r.accessory) rewards.grantAccessory(r.accessory);
+  inventoryHud.toast(`Quest complete: ${q.title}! (${rewardText(r, rewardNames)})`);
+  save();
+};
+const givers = new QuestGivers(hudEl, quests, inventory, (id) => places.beaten.has(id), (t) => inventoryHud.toast(t));
+scene.add(givers.group);
+buildings.addSolid({ colliders: givers.colliders, obstacles: [] });
+/** Each Dungeon's hoard holds a new scale colour. */
+const HOARD_SCALES: Record<string, AccessoryId> = { 'dungeon-2': 'emeraldScales', 'dungeon-3': 'crimsonScales', 'dungeon-4': 'midnightScales' };
+
+/** Villagers who give quests: Ruby and Sky in the Home Village, and every rescued dragon. */
+function villagerGivers(): Giver[] {
+  const out: Giver[] = [];
+  const ruby = village.villagerModel(0), sky = village.villagerModel(1);
+  if (ruby) out.push({ id: 'ruby', name: 'Ruby', at: ruby.root, height: 12 });
+  if (sky) out.push({ id: 'sky', name: 'Sky', at: sky.root, height: 12 });
+  for (const [id, m] of rescuedModels) out.push({ id, name: prisonerFor(places.list.find((p) => p.id === id)!).name, at: m.root, height: 12 });
+  return out;
+}
+
+/** A Quest Board in every village (and in every castle you've won). */
+function placeBoards() {
+  const h = island.home;
+  givers.board('board-home', h.x + 24, island.heightAt(h.x + 24, h.z + 24), h.z + 24, h.x, h.z);
+  for (const v of buildings.villages()) {
+    if (v.x === h.x && v.z === h.z) continue;
+    const castle = places.list.find((p) => p.x === v.x && p.z === v.z);
+    if (castle) {
+      const out = new THREE.Vector3(-Math.sin(castle.rot), 0, -Math.cos(castle.rot));
+      const at = castle.portal.clone().addScaledVector(out, 25);
+      givers.board(`board-${castle.id}`, at.x, castle.y, at.z, castle.portal.x, castle.portal.z);
+    } else {
+      givers.board(`board-${Math.round(v.x)},${Math.round(v.z)}`, v.x, island.heightAt(v.x, v.z + 48), v.z + 48, v.x, v.z);
+    }
+  }
+}
 
 function refreshMarkers() {
   worldMap.markers = [
@@ -200,7 +264,10 @@ const buildMode = new BuildMode(scene, hudEl, island, inventory, buildings, (kin
   inventoryHud.toast(`Building a ${BUILDINGS[kind].name}!`);
   save();
 });
-dens.onDefeated = caves.onDefeated = (m) => inventory.add('gold', GOLD_DROP[m.kind]);
+dens.onDefeated = caves.onDefeated = (m) => {
+  inventory.add('gold', GOLD_DROP[m.kind]);
+  quests.defeated(m.kind);
+};
 let knockedOutFor = -1; // seconds since being knocked out, or -1
 
 // ---------- game state ----------
@@ -228,6 +295,8 @@ function save() {
     lastVillage,
     places: { owned: places.ownedIds, beaten: [...places.beaten], hoards: [...places.hoards] },
     rescued,
+    quests: quests.state,
+    rewards: rewards.state,
   };
   writeSlot(slot, data);
   sinceSave = 0;
@@ -250,11 +319,17 @@ function startGame(s: number) {
     for (const id of data.places?.beaten ?? []) places.beaten.add(id);
     for (const id of data.places?.hoards ?? []) places.hoards.add(id);
     rescued = data.rescued ?? [];
+    rescuedModels.clear();
     for (const r of rescued) settleRescued(r.place, r.village);
+    quests.state = data.quests ?? NO_QUESTS;
+    rewards.state = data.rewards ?? { powers: [], accessories: [], worn: {} };
   } else {
     buildings.clear();
     places.reset();
     rescued = [];
+    rescuedModels.clear();
+    quests.state = NO_QUESTS;
+    rewards.state = { powers: [], accessories: [], worn: {} };
     // A new game starts in the Home Village, looking towards the mountains.
     player.placeAt(island.home.x, island.home.z + 40, 0.6);
     sky.time = 0.3;
@@ -264,6 +339,7 @@ function startGame(s: number) {
     worldMap.explored = new Uint8Array(island.W * island.H);
   }
   refreshMarkers();
+  givers.clearBoards('board-home');
   // Build the ground nearby before showing anything.
   terrain.update(player.position.x, player.position.z, 1500);
   titleEl.classList.add('hidden');
@@ -352,7 +428,7 @@ if (params.has('debug')) {
   }
   input.forceLocked = params.has('mouse');
   if (params.has('rich')) inventory.state = { wood: 999, stone: 999, gold: 999 };
-  (window as unknown as { game: unknown }).game = { places, caves, interiors, island, player, terrain, sky, worldMap, renderer, dens, fire, claws, input, inventory, buildings, buildMode, gathering };
+  (window as unknown as { game: unknown }).game = { quests, rewards, givers, places, caves, interiors, island, player, terrain, sky, worldMap, renderer, dens, fire, claws, input, inventory, buildings, buildMode, gathering };
 } else {
   showTitle();
 }
@@ -449,6 +525,12 @@ renderer.setAnimationLoop(() => {
       }
     }
     interiors.update(dt, player.position, inside ? [] : caves.glowsNear(player.position));
+    if (!inside) {
+      placeBoards();
+      const inCave = caves.at(player.position);
+      if (inCave && inCave.depth > 0.3) quests.visited(inCave.cave.id);
+    }
+    givers.update(dt, input, player.position, villagerGivers(), !inside && !interiors.busy);
     if (!inside) {
       gathering.update(dt);
       const inVillage = buildings.villageAt(player.position.x, player.position.z);

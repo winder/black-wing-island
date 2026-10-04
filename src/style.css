@@ -88,3 +88,21 @@ button.small { font-size: 14px; padding: 6px 12px; margin-left: 6px; background:
 .build-menu p.bad { color: #ff8a80; font-size: 16px; opacity: 1; }
 
 .fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity 0.4s; z-index: 50; }
+
+/* ---------- quests ---------- */
+.talk-hint { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); padding: 6px 14px; border-radius: 10px; background: rgba(20, 12, 24, 0.7); font-size: 18px; }
+.talk-hint b, .quest-dialog .keys b { display: inline-block; min-width: 22px; padding: 0 5px; margin-right: 4px; border-radius: 5px; background: var(--accent); text-align: center; }
+.quest-dialog {
+  position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); width: min(520px, 86vw);
+  padding: 16px 20px; border-radius: 12px; background: var(--parchment); color: var(--ink);
+  border: 3px solid #6b4a2f; box-shadow: 0 8px 30px var(--shadow); font-size: 17px; line-height: 1.4;
+}
+.quest-dialog h3 { margin: 0 0 6px; font-size: 22px; color: #6b2a1c; }
+.quest-dialog h4 { margin: 0 0 4px; font-size: 19px; }
+.quest-dialog p { margin: 6px 0; }
+.quest-dialog .goal { font-weight: bold; }
+.quest-dialog .reward { color: #6b4a00; }
+.quest-dialog .keys { margin-top: 10px; font-size: 14px; color: #5a4a3a; }
+.quest-dialog .keys b { color: var(--parchment); }
+.quest-tracker { position: absolute; top: 16px; right: 16px; max-width: 300px; padding: 10px 14px; border-radius: 10px; background: rgba(20, 12, 24, 0.6); font-size: 16px; line-height: 1.4; }
+.quest-tracker i { color: #8dff9a; }

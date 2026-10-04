@@ -2,6 +2,8 @@
 
 import type { PlacedBuilding } from './build/buildings';
 import type { PlayerState } from './player/player';
+import type { QuestState } from './quests/quests';
+import type { Rewards } from './quests/rewards';
 
 export const SLOTS = 3;
 const KEY = (slot: number) => `black-wing-island/slot-${slot}`;
@@ -22,6 +24,8 @@ export interface SaveData {
   // Added in Version 4.
   places?: { owned: string[]; beaten: string[]; hoards: string[] };
   rescued?: { place: string; village: { x: number; z: number; r: number } }[];
+  quests?: QuestState;
+  rewards?: Rewards['state'];
 }
 
 export function packBits(bytes: Uint8Array): string {

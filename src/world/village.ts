@@ -120,8 +120,11 @@ export class Village {
     this.villagers = this.villagers.filter((v) => !v.added);
   }
 
-  /** Where the player is, so far-off villagers can skip animating. */
+  /** Where the player is, so far-off villagers can skip animating, and near ones stop to look. */
   readonly viewer = new THREE.Vector3();
+
+  /** A Home Village villager's model (the first few are Quest Givers). */
+  villagerModel(i: number) { return this.villagers[i]?.model ?? null; }
 
   update(dt: number, nightness: number) {
     this.t += dt;
@@ -130,6 +133,14 @@ export class Village {
     this.villagers.forEach((v) => {
       const root = v.model.root;
       const vel = v.velocity;
+      // Stop and look at the player when they come close (to talk).
+      const toPlayer = Math.hypot(this.viewer.x - root.position.x, this.viewer.z - root.position.z);
+      if (toPlayer < 28) {
+        v.pause = Math.max(v.pause, 1);
+        const want = Math.atan2(root.position.x - this.viewer.x, root.position.z - this.viewer.z);
+        const turn = Math.atan2(Math.sin(want - root.rotation.y), Math.cos(want - root.rotation.y));
+        root.rotation.y += THREE.MathUtils.clamp(turn, -2 * dt, 2 * dt);
+      }
       if (v.pause > 0) {
         v.pause -= dt;
         vel.multiplyScalar(Math.exp(-6 * dt));
