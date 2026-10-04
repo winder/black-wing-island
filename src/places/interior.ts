@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { rng } from '../build/blueprints';
 import { Collider, box } from '../world/collide';
+import { FireSpec, Fires } from '../world/fire';
 
 export const CELL = 26;
 const G = 20; // grid cells across
@@ -110,12 +111,16 @@ const THEME = {
   dungeon: { floor: '#3e3833', wall: '#4d4640', ceiling: '#2a2521', trim: '#1d1916' },
 };
 
+const TORCH_WOOD = new THREE.MeshLambertMaterial({ color: '#3a2a1c', flatShading: true });
+const TORCH_HEAD = new THREE.MeshLambertMaterial({ color: '#241812', emissive: '#4a1a06', flatShading: true });
+
 export class Interior implements Indoors {
   readonly group = new THREE.Group();
   readonly layout: Layout;
   readonly colliders: Collider[] = [];
   /** Where flames are, for the torch lights. */
   readonly torches: THREE.Vector3[] = [];
+  private flames: FireSpec[] = [];
   /** Where you arrive, facing in. */
   readonly arrive = new THREE.Vector3();
   readonly arriveYaw = 0;
@@ -198,6 +203,7 @@ export class Interior implements Indoors {
     geo.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
     geo.computeVertexNormals();
     this.group.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })));
+    this.group.add(new Fires(this.flames));
   }
 
   /** Pillars, banners, stalactites. */
@@ -253,13 +259,18 @@ export class Interior implements Indoors {
   }
 
   private torch(x: number, y: number, z: number, n: number[], r: () => number) {
-    const wood = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, 2.2, 5), new THREE.MeshLambertMaterial({ color: '#3a2a1c', flatShading: true }));
+    const tilt = new THREE.Euler(n[2] * 0.5, 0, -n[0] * 0.5);
+    const wood = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, 2.2, 5), TORCH_WOOD);
     wood.position.set(x, y, z);
-    wood.rotation.set(n[2] * 0.5, 0, -n[0] * 0.5);
-    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.6 + r() * 0.4, 6), new THREE.MeshBasicMaterial({ color: '#ffae3a' }));
-    flame.position.set(x + n[0] * 0.5, y + 1.6, z + n[2] * 0.5);
-    this.group.add(wood, flame);
-    this.torches.push(flame.position.clone());
+    wood.rotation.copy(tilt);
+    // A head of pitch-soaked rags at the top, where it burns.
+    const top = new THREE.Vector3(0, 1.1, 0).applyEuler(tilt).add(wood.position);
+    const head = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.32, 0.7, 6), TORCH_HEAD);
+    head.position.copy(top);
+    head.rotation.copy(tilt);
+    this.group.add(wood, head);
+    this.flames.push({ x: top.x, y: top.y + 0.2, z: top.z, size: 2.2 + r() * 0.5 });
+    this.torches.push(top.clone().setY(top.y + 1.2));
   }
 
   /** One flat quad facing `n`. */

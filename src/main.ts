@@ -34,6 +34,7 @@ import { SheepFlocks } from './world/sheep';
 import { Sky } from './world/sky';
 import { Terrain } from './world/terrain';
 import { Village } from './world/village';
+import { tickFires } from './world/fire';
 
 const AUTOSAVE_SECONDS = 60;
 const NO_QUESTS: QuestState = { active: null, done: [], boards: {} };
@@ -654,7 +655,9 @@ renderer.setAnimationLoop(() => {
   terrain.update(focus.x, focus.z, 6);
   sky.update(playing && !paused ? dt : dt * 0.2, camera.position, scene);
   village.viewer.copy(player.position);
-  village.update(dt, 1 - THREE.MathUtils.smoothstep(Math.sin((sky.time - 0.25) * Math.PI * 2), -0.1, 0.2));
+  const nightness = 1 - THREE.MathUtils.smoothstep(Math.sin((sky.time - 0.25) * Math.PI * 2), -0.1, 0.2);
+  village.update(dt, nightness);
+  tickFires(dt, interiors.current ? 1 : nightness);
   sheep.update(dt, player.position);
   ocean.position.set(camera.position.x, 0, camera.position.z);
 

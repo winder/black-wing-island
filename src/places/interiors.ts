@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { Interior } from './interior';
 import type { Lair } from './lair';
 import { BIOME_STONE, Place } from './places';
+import { flicker } from '../world/fire';
 
 const FADE_SECONDS = 0.45;
 const TORCH_LIGHTS = 5;
@@ -79,7 +80,9 @@ export class Interiors {
       const p = torches[i];
       if (!p) { l.intensity = 0; return; }
       l.position.copy(p);
-      l.intensity = 260 * (1 + Math.sin(this.t * 11 + i * 1.7) * 0.08 + Math.sin(this.t * 23 + i) * 0.05);
+      const f = flicker(this.t, p.x * 0.37 + p.z);
+      l.position.y += f * 0.4;
+      l.intensity = 260 * (0.82 + f * 0.3);
     });
   }
 

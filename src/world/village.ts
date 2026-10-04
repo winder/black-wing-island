@@ -6,6 +6,7 @@ import { makeDragon, DragonModel } from '../player/dragonModel';
 import { Collider } from './collide';
 import { Island, VILLAGE_RADIUS } from './island';
 import { hash2 } from './noise';
+import { Fires, flicker } from './fire';
 
 const VILLAGER_COLORS: [string, string][] = [
   ['#c0392b', '#f1c40f'], ['#2e86c1', '#aed6f1'], ['#27ae60', '#f9e79f'],
@@ -29,7 +30,7 @@ export class Village {
   /** What the dragon bumps into: the huts' walls and the bonfire's ring of stones. */
   readonly colliders: Collider[] = [];
   private fire: THREE.PointLight;
-  private flames: THREE.Mesh;
+  private fireAt = new THREE.Vector3();
   private t = 0;
 
   constructor(private island: Island) {
@@ -75,14 +76,35 @@ export class Village {
       s.position.set(cx + Math.cos(a) * 6, y0 + 0.5, cz + Math.sin(a) * 6);
       this.group.add(s);
     }
-    this.flames = new THREE.Mesh(
-      new THREE.ConeGeometry(3, 7, 7),
-      new THREE.MeshBasicMaterial({ color: '#ff8a1e' }),
-    );
-    this.flames.position.set(cx, y0 + 3.5, cz);
-    this.fire = new THREE.PointLight('#ff9a40', 3000, 140, 2);
-    this.fire.position.set(cx, y0 + 8, cz);
-    this.group.add(this.flames, this.fire);
+    // Logs leaning together over a bed of glowing coals.
+    const log = new THREE.MeshLambertMaterial({ color: '#4a3020', flatShading: true });
+    const charred = new THREE.MeshLambertMaterial({ color: '#1c1410', emissive: '#3a1004', flatShading: true });
+    const coal = new THREE.MeshLambertMaterial({ color: '#ff6a1a', emissive: '#ff4a00', flatShading: true });
+    const bed = new THREE.Mesh(new THREE.CylinderGeometry(4.6, 5, 0.6, 9), charred);
+    bed.position.set(cx, y0 + 0.2, cz);
+    this.group.add(bed);
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2 + hash2(i, 5, 9), r = 1 + hash2(i, 6, 9) * 2.6;
+      const c = new THREE.Mesh(new THREE.DodecahedronGeometry(0.6 + hash2(i, 7, 9) * 0.5, 0), coal);
+      c.position.set(cx + Math.cos(a) * r, y0 + 0.6, cz + Math.sin(a) * r);
+      this.group.add(c);
+    }
+    // Logs laid in a star, ends burning together in the middle.
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2 + 0.2 + hash2(i, 8, 9) * 0.3;
+      const len = 6 + hash2(i, 10, 9) * 1.5;
+      const l = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, len, 6), i % 2 ? log : charred);
+      const mid = 0.6 + len / 2;
+      l.position.set(cx + Math.cos(a) * mid, y0 + 0.7, cz + Math.sin(a) * mid);
+      l.lookAt(cx, y0 + 0.7 + len * 0.3, cz); // inner end up on the others
+      l.rotateX(Math.PI / 2);
+      this.group.add(l);
+    }
+    this.group.add(new Fires([{ x: cx, y: y0 + 0.4, z: cz, size: 9, smoke: 1 }]));
+    this.fireAt.set(cx, y0 + 6, cz);
+    this.fire = new THREE.PointLight('#ff8a36', 3000, 140, 2);
+    this.fire.position.copy(this.fireAt);
+    this.group.add(this.fire);
 
     for (let i = 0; i < VILLAGER_COLORS.length; i++) {
       const [body, accent] = VILLAGER_COLORS[i];
@@ -128,8 +150,10 @@ export class Village {
 
   update(dt: number, nightness: number) {
     this.t += dt;
-    this.flames.scale.set(1 + Math.sin(this.t * 9) * 0.08, 1 + Math.sin(this.t * 13) * 0.15, 1 + Math.cos(this.t * 7) * 0.08);
-    this.fire.intensity = (800 + 3500 * nightness) * (1 + Math.sin(this.t * 17) * 0.1);
+    // The light wavers and jumps about a little, as the flames do.
+    const f = flicker(this.t);
+    this.fire.position.set(this.fireAt.x + Math.sin(this.t * 5.3) * 0.6, this.fireAt.y + f * 1.2, this.fireAt.z + Math.cos(this.t * 4.1) * 0.6);
+    this.fire.intensity = (800 + 3500 * nightness) * (0.8 + f * 0.35);
     this.villagers.forEach((v) => {
       const root = v.model.root;
       const vel = v.velocity;

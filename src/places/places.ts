@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { Fires } from '../world/fire';
 import { Blueprint, Builder, CastleLook, Part, buildingMaterial as mat, monsterCastle, rng } from '../build/blueprints';
 import { footprintHeights } from '../build/buildings';
 import { Gate } from '../build/gates';
@@ -138,9 +139,12 @@ export class Places {
 
   /** (Re)build a place's model, e.g. when a castle changes hands. */
   private rebuild(p: Place) {
-    this.models.get(p.id)?.removeFromParent();
+    const old = this.models.get(p.id);
+    old?.removeFromParent();
+    old?.children.forEach((c) => { if (c instanceof Fires) c.dispose(); });
     const bp = this.blueprint(p.kind, p.biome, p.seed, this.owned.has(p.id));
     const g = mergeParts([...bp.parts, plinthFor(p, this.island)]);
+    if (bp.flames?.length) g.add(new Fires(bp.flames));
     // The doorway: wooden gates in front of deep black darkness.
     if (bp.portal) {
       const [w, h] = p.kind === 'castle' ? [12, 16] : [12.4, 18];
@@ -229,14 +233,15 @@ function dungeonEntrance(seed: number, stoneColor: string): Blueprint {
     // Fire baskets.
     b.add(new THREE.CylinderGeometry(1.6, 1, 1.4, 6), dark, s * 13, 5, -10);
     b.add(new THREE.CylinderGeometry(0.4, 0.4, 5, 5), dark, s * 13, 2.5, -10);
-    b.add(new THREE.ConeGeometry(1.3, 3, 6), mat('#ff8a1e', '#ff5a00'), s * 13, 7, -10);
+    b.add(new THREE.DodecahedronGeometry(1.1, 0), mat('#ff6a1a', '#ff4a00'), s * 13, 5.6, -10); // glowing coals
+    b.flames.push({ x: s * 13, y: 5.7, z: -10, size: 3.4, smoke: 0.5 });
   }
   b.add(new THREE.BoxGeometry(22, 4, 5), stone, 0, 21, -7);
   b.add(new THREE.BoxGeometry(14, 2, 6), dark, 0, 1, -9); // a worn step
   b.portal = new THREE.Vector3(0, 0, -6);
   b.colliders.push(box(0, 8, 17, 14, 26));
   for (const s of [-1, 1]) b.colliders.push({ x: s * 8, z: -7, r: 2.5, height: 21 });
-  return { kind: 'castle', parts: b.parts, footprint: 22, colliders: b.colliders, turrets: [], portal: b.portal };
+  return { kind: 'castle', parts: b.parts, footprint: 22, colliders: b.colliders, turrets: [], portal: b.portal, flames: b.flames };
 }
 
 /** One mesh per material, so a castle of hundreds of blocks is only a few draws. */

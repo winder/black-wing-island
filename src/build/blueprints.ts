@@ -7,6 +7,7 @@
 
 import * as THREE from 'three';
 import { box, Collider } from '../world/collide';
+import type { FireSpec } from '../world/fire';
 import { Gate } from './gates';
 import { BuildingKind } from './inventory';
 
@@ -23,6 +24,8 @@ export interface Blueprint {
   turrets: THREE.Vector3[];
   /** A doorway into an Interior, in model space (Monster Castles and Dungeons). */
   portal?: THREE.Vector3;
+  /** Fires burning on it (fire baskets), in model space. */
+  flames?: FireSpec[];
 }
 
 function rng(seed: number) {
@@ -52,6 +55,7 @@ export class Builder {
   parts: Part[] = [];
   colliders: Collider[] = [];
   turrets: THREE.Vector3[] = [];
+  flames: FireSpec[] = [];
   portal?: THREE.Vector3;
   add(geometry: THREE.BufferGeometry, material: THREE.Material, x: number, y: number, z: number, ry = 0, rx = 0) {
     const m = new THREE.Matrix4().compose(
@@ -174,7 +178,8 @@ function tower(r: () => number): Builder {
   b.add(new THREE.BoxGeometry(4, 7, 1), mat(DARK), 0, 3.5, -6.2);
   // A fire basket on top: where fire bolts come from.
   b.add(new THREE.CylinderGeometry(2, 1.3, 1.5, 8), mat('#3a2a20'), 0, top + 0.8, 0);
-  b.add(new THREE.ConeGeometry(1.5, 3, 6), mat('#ff8a1e', '#ff5a00'), 0, top + 3, 0);
+  b.add(new THREE.DodecahedronGeometry(1.4, 0), mat('#ff6a1a', '#ff4a00'), 0, top + 1.3, 0); // glowing coals
+  b.flames.push({ x: 0, y: top + 1.4, z: 0, size: 3.6, smoke: 0.5 });
   b.turrets.push(new THREE.Vector3(0, top + 3, 0));
   return b;
 }
@@ -228,14 +233,14 @@ const FOOTPRINT: Record<BuildingKind, number> = { house: 11, villageCenter: 30, 
 /** A Monster Castle: a castle in its biome's stone, flying the banner of whoever holds it. */
 export function monsterCastle(seed: number, look: CastleLook): Blueprint {
   const b = castle(rng(seed), look);
-  return { kind: 'castle', parts: b.parts, footprint: FOOTPRINT.castle, colliders: b.colliders, turrets: [], portal: b.portal };
+  return { kind: 'castle', parts: b.parts, footprint: FOOTPRINT.castle, colliders: b.colliders, turrets: [], portal: b.portal, flames: b.flames };
 }
 
 export { mat as buildingMaterial, rng };
 
 export function blueprint(kind: BuildingKind, seed: number): Blueprint {
   const b = GENERATORS[kind](rng(seed));
-  return { kind, parts: b.parts, footprint: FOOTPRINT[kind], colliders: b.colliders, turrets: b.turrets };
+  return { kind, parts: b.parts, footprint: FOOTPRINT[kind], colliders: b.colliders, turrets: b.turrets, flames: b.flames };
 }
 
 /** A foundation reaching down into the ground, for buildings on slopes. */

@@ -7,6 +7,7 @@ import { Monster } from '../monsters/monster';
 import { Island, VILLAGE_RADIUS } from '../world/island';
 import { Collider, pushDragonOut } from '../world/collide';
 import { Village } from '../world/village';
+import { Fires } from '../world/fire';
 import { Blueprint, blueprint, plinth } from './blueprints';
 import { BuildingKind } from './inventory';
 
@@ -32,6 +33,8 @@ interface Built extends PlacedBuilding {
   colliders: Collider[];
   turrets: THREE.Vector3[];
   reload: number;
+  /** Fire baskets, lit once Construction is done. */
+  fires: Fires | null;
 }
 
 interface Bolt { mesh: THREE.Mesh; target: Monster; sphere: number; from: THREE.Vector3 }
@@ -124,6 +127,8 @@ export class Buildings {
       group.add(m);
       meshes.push(m);
     }
+    const fires = bp.flames?.length ? new Fires(bp.flames) : null;
+    if (fires) { fires.visible = instant; group.add(fires); }
     this.group.add(group);
     // Colliders and turrets in world space.
     const rot = new THREE.Matrix4().makeRotationY(p.rot);
@@ -133,7 +138,7 @@ export class Buildings {
       return { ...c, x: w.x, z: w.z, rot: (c.rot ?? 0) + p.rot, height: baseY + c.height };
     });
     const turrets = bp.turrets.map((t) => toWorld(t.clone()));
-    const b: Built = { ...p, group, meshes, baseY, t: instant ? CONSTRUCT_SECONDS : 0, colliders, turrets, reload: 0 };
+    const b: Built = { ...p, group, meshes, baseY, t: instant ? CONSTRUCT_SECONDS : 0, colliders, turrets, reload: 0, fires };
     this.list.push(b);
     if (p.kind === 'house') {
       const v = this.villageAt(p.x, p.z) ?? { x: p.x, z: p.z, r: 60, name: '' };
@@ -145,7 +150,7 @@ export class Buildings {
 
   /** Take everything down (when switching save slots). */
   clear() {
-    for (const b of this.list) this.group.remove(b.group);
+    for (const b of this.list) { this.group.remove(b.group); b.fires?.dispose(); }
     for (const bolt of this.bolts) this.group.remove(bolt.mesh);
     this.list = [];
     this.bolts = [];
@@ -179,6 +184,7 @@ export class Buildings {
   private construct(b: Built, dt: number) {
     const before = b.t;
     b.t = Math.min(CONSTRUCT_SECONDS, b.t + dt);
+    if (b.fires) b.fires.visible = b.t >= CONSTRUCT_SECONDS;
     const n = b.meshes.length;
     const at = (i: number) => (i / n) * (CONSTRUCT_SECONDS - 0.6);
     b.meshes.forEach((m, i) => {
