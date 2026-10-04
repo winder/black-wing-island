@@ -43,6 +43,8 @@ interface Chunk {
 export class Terrain {
   readonly group = new THREE.Group();
   private chunks = new Map<string, Chunk>();
+  /** Tunnels that break through the surface: the ground leaves a hole there. Set before chunks are built. */
+  hole?: { touching(x0: number, z0: number, size: number): boolean; holeAt(x: number, y: number, z: number): boolean };
   /** Round spots kept free of trees and rocks. Add them before chunks are built. */
   readonly clearings: { x: number; z: number; r: number }[] = [];
   private land: { cx: number; cz: number }[] = [];
@@ -176,10 +178,14 @@ export class Terrain {
       col.set([col[k * 3], col[k * 3 + 1], col[k * 3 + 2]], s * 3);
     });
 
+    // Cave mouths: leave out any square with a corner inside a tunnel.
+    const holed = this.hole?.touching(x0, z0, CHUNK_SIZE) ? new Uint8Array(verts) : null;
+    if (holed) for (let k = 0; k < verts; k++) holed[k] = this.hole!.holeAt(pos[k * 3], pos[k * 3 + 1], pos[k * 3 + 2]) ? 1 : 0;
     const idx: number[] = [];
     for (let j = 0; j < n; j++) {
       for (let i = 0; i < n; i++) {
         const a = j * (n + 1) + i, b = a + 1, d = a + n + 1, e = d + 1;
+        if (holed && (holed[a] || holed[b] || holed[d] || holed[e])) continue;
         idx.push(a, d, b, b, d, e);
       }
     }

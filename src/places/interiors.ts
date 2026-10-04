@@ -72,12 +72,11 @@ export class Interiors {
     this.busy = false;
   }
 
-  /** Light the torches nearest the player, flickering. */
-  update(dt: number, at: THREE.Vector3) {
+  /** Light the torches nearest the player, flickering (or, outside, any `glows` given, like cave gold). */
+  update(dt: number, at: THREE.Vector3, glows: THREE.Vector3[] = []) {
     this.t += dt;
-    if (!this.current) return;
-    if (!this.busy) this.current.lair.update(dt, at);
-    const torches = [...this.current.interior.torches].sort((a, b) => a.distanceToSquared(at) - b.distanceToSquared(at));
+    if (this.current && !this.busy) this.current.lair.update(dt, at);
+    const torches = [...(this.current ? this.current.interior.torches : glows)].sort((a, b) => a.distanceToSquared(at) - b.distanceToSquared(at));
     this.lights.forEach((l, i) => {
       const p = torches[i];
       if (!p) { l.intensity = 0; return; }

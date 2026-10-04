@@ -19,6 +19,7 @@ import { WorldMap } from './ui/map';
 import { Biome } from './world/biomes';
 import { Island } from './world/island';
 import { Places } from './places/places';
+import { Caves } from './places/caves';
 import { Interiors } from './places/interiors';
 import { HOARD_GOLD, Lair, LairEvents, prisonerFor } from './places/lair';
 import { BOSS_GOLD } from './monsters/bosses';
@@ -69,7 +70,10 @@ const claws = new ClawSwipe(camera);
 const projectiles = new Projectiles(island);
 const dens = new Dens(island);
 const places = new Places(island, dens.dens.map((d) => d.at));
-terrain.clearings.push(...places.list.map((p) => ({ x: p.x, z: p.z, r: p.radius + 25 })));
+const caves = new Caves(island, places.list.map((p) => ({ x: p.x, z: p.z, r: p.radius })));
+terrain.clearings.push(...places.list.map((p) => ({ x: p.x, z: p.z, r: p.radius + 25 })), ...caves.list.map((c) => ({ x: c.mouth.x, z: c.mouth.z, r: 30 })));
+terrain.hole = caves;
+player.caves = caves;
 const inventory = new Inventory();
 const gathering = new Gathering(terrain, inventory, (harvested, tree) => {
   if (harvested) sound.hit();
@@ -84,7 +88,7 @@ let rescued: { place: string; village: { x: number; z: number; r: number } }[] =
 /** Where you wake up if knocked out: the last village you were in. */
 let lastVillage = { x: island.home.x, z: island.home.z };
 scene.add(sky.group, terrain.group, village.group, sheep.group, fire.object, fire.light, projectiles.group, dens.group,
-  gathering.group, buildings.group, places.group);
+  gathering.group, buildings.group, places.group, caves.group);
 
 // What monsters can do to the world.
 const world: World = {
@@ -135,7 +139,7 @@ const pauseEl = document.querySelector<HTMLDivElement>('#pause')!;
 const placeEl = document.querySelector<HTMLDivElement>('#place')!;
 const underwaterEl = document.querySelector<HTMLDivElement>('#underwater')!;
 // Going in and out of Interiors hides or shows the whole outside world.
-const outside = [terrain.group, village.group, sheep.group, dens.group, gathering.group, buildings.group, places.group, ocean];
+const outside = [terrain.group, village.group, sheep.group, dens.group, gathering.group, buildings.group, places.group, caves.group, ocean];
 const interiors = new Interiors(scene, ui, (inside) => {
   for (const o of outside) o.visible = !inside;
   sky.indoors = inside;
@@ -182,7 +186,10 @@ const lairEvents: LairEvents = {
 };
 
 function refreshMarkers() {
-  worldMap.markers = places.list.map((p) => ({ x: p.x, z: p.z, kind: p.kind, owned: places.isOwned(p.id) }));
+  worldMap.markers = [
+    ...places.list.map((p) => ({ x: p.x, z: p.z, kind: p.kind, owned: places.isOwned(p.id) })),
+    ...caves.list.map((c) => ({ x: c.mouth.x, z: c.mouth.z, kind: 'cave' as const })),
+  ];
 }
 const worldMap = new WorldMap(island, hudEl);
 refreshMarkers();
@@ -193,7 +200,7 @@ const buildMode = new BuildMode(scene, hudEl, island, inventory, buildings, (kin
   inventoryHud.toast(`Building a ${BUILDINGS[kind].name}!`);
   save();
 });
-dens.onDefeated = (m) => inventory.add('gold', GOLD_DROP[m.kind]);
+dens.onDefeated = caves.onDefeated = (m) => inventory.add('gold', GOLD_DROP[m.kind]);
 let knockedOutFor = -1; // seconds since being knocked out, or -1
 
 // ---------- game state ----------
@@ -345,7 +352,7 @@ if (params.has('debug')) {
   }
   input.forceLocked = params.has('mouse');
   if (params.has('rich')) inventory.state = { wood: 999, stone: 999, gold: 999 };
-  (window as unknown as { game: unknown }).game = { places, interiors, island, player, terrain, sky, worldMap, renderer, dens, fire, claws, input, inventory, buildings, buildMode, gathering };
+  (window as unknown as { game: unknown }).game = { places, caves, interiors, island, player, terrain, sky, worldMap, renderer, dens, fire, claws, input, inventory, buildings, buildMode, gathering };
 } else {
   showTitle();
 }
@@ -354,7 +361,7 @@ if (params.has('debug')) {
 
 /** Monsters you can fight here: a Boss inside, or the dens' monsters outside. */
 function foes(): Monster[] {
-  return interiors.current ? interiors.current.lair.monsters : dens.active;
+  return interiors.current ? interiors.current.lair.monsters : [...dens.active, ...caves.active];
 }
 
 /** The monster to show a health bar for: whoever you're fighting, nearest first. */
@@ -375,8 +382,12 @@ function updateCombat(dt: number) {
   const wantFire = (input.isMouseDown(0) && !building || input.isDown('KeyE')) && !v.knockedOut;
   fire.update(dt, wantFire, player, targets);
   sound.fire(fire.breathing);
-  claws.update(dt, input, player, [...targets, ...gathering.targetsNear(player.position)], () => sound.swish(), !building || input.wasPressed('KeyF'));
-  if (!interiors.current) dens.update(dt, world);
+  const gatherable = interiors.current ? [] : [...gathering.targetsNear(player.position), ...caves.targetsNear(player.position, inventory, () => sound.hit())];
+  claws.update(dt, input, player, [...targets, ...gatherable], () => sound.swish(), !building || input.wasPressed('KeyF'));
+  if (!interiors.current) {
+    dens.update(dt, world);
+    caves.update(dt, world);
+  }
   buildings.update(dt, dens.active);
   projectiles.update(dt, player.center(), 4, (hit) => {
     world.hurtPlayer(hit.damage, hit.position, 14);
@@ -424,7 +435,10 @@ renderer.setAnimationLoop(() => {
     if (!inside) buildMode.update(input, camera, player.position);
     if (!interiors.busy) player.update(dt, input);
     if (inside) pushDragonOut(player.position, player.yaw, [...inside.interior.colliders, ...inside.lair.colliders]);
-    else buildings.pushOut(player.position, player.yaw);
+    else {
+      buildings.pushOut(player.position, player.yaw);
+      caves.pushOut(player.position, player.yaw);
+    }
     // Walk into a Portal to go in; back to the doorway to come out.
     if (!interiors.busy && !player.vitals.knockedOut) {
       if (inside) {
@@ -434,7 +448,7 @@ renderer.setAnimationLoop(() => {
         if (door) interiors.enter(door, player);
       }
     }
-    interiors.update(dt, player.position);
+    interiors.update(dt, player.position, inside ? [] : caves.glowsNear(player.position));
     if (!inside) {
       gathering.update(dt);
       const inVillage = buildings.villageAt(player.position.x, player.position.z);
@@ -485,7 +499,17 @@ renderer.setAnimationLoop(() => {
   const camGround = island.ground(camera.position.x, camera.position.z);
   const fog = scene.fog as THREE.Fog;
   const underwater = !interiors.current && (camera.position.y < camGround.water || (camGround.height < 0 && camera.position.y < 0));
+  // Deep in a cave it gets dark.
+  const cave = interiors.current ? null : caves.at(camera.position);
+  if (cave) {
+    const dark = cave.depth;
+    sky.sun.intensity *= 1 - 0.95 * dark;
+    sky.moon.intensity *= 1 - 0.95 * dark;
+    sky.ambient.intensity *= 1 - 0.8 * dark;
+    fog.color.lerp(new THREE.Color('#0b0807'), dark);
+  }
   if (interiors.current) { fog.near = 30; fog.far = 260; }
+  else if (cave && cave.depth > 0.3) { fog.near = 30; fog.far = 400; }
   else if (underwater) { fog.color.set('#1d5a7a'); fog.near = 2; fog.far = 70; }
   else {
     // See further when flying high, so the whole dragon shape can be seen from the sky.

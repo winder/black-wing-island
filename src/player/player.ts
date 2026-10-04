@@ -6,6 +6,7 @@ import { Vitals } from '../combat/vitals';
 import { Input } from '../input';
 import { Island } from '../world/island';
 import type { Indoors } from '../places/interior';
+import type { Caves } from '../places/caves';
 import { makeDragon, DragonModel } from './dragonModel';
 
 export type Mode = 'walk' | 'fly' | 'swim';
@@ -43,6 +44,9 @@ export class Player {
   private fpWings: DragonModel;
   /** Set while inside an Interior: its floor, ceiling and walls replace the Island's. */
   indoors: Indoors | null = null;
+  /** The Island's caves: inside a tunnel, its floor and roof replace the ground. */
+  caves: Caves | null = null;
+  private probe = new THREE.Vector3();
 
   constructor(private island: Island, private camera: THREE.PerspectiveCamera, scene: THREE.Scene) {
     this.model = makeDragon();
@@ -118,6 +122,8 @@ export class Player {
 
   private surfaceAt(x: number, z: number) {
     if (this.indoors) return { ground: this.indoors.floorAt(x, z), water: -Infinity, inland: false, coast: Infinity };
+    const cave = this.caves?.at(this.probe.set(x, this.position.y, z));
+    if (cave) return { ground: cave.floor, water: -Infinity, inland: false, coast: Infinity };
     const g = this.island.ground(x, z);
     const ocean = g.height < 0 ? 0 : -Infinity;
     return { ground: g.height, water: Math.max(g.water, ocean), inland: g.water !== -Infinity, coast: g.coast };
@@ -220,6 +226,9 @@ export class Player {
     if (this.indoors) {
       const roof = this.indoors.ceilingAt(p.x, p.z) - 6;
       if (p.y > roof) { p.y = roof; v.y = Math.min(0, v.y); }
+    } else {
+      const cave = this.caves?.at(p);
+      if (cave && p.y > cave.ceiling - 6) { p.y = cave.ceiling - 6; v.y = Math.min(0, v.y); }
     }
 
     // Out at sea, the wind pushes the dragon back towards the Island.
@@ -267,6 +276,7 @@ export class Player {
       const pos = eye.clone().add(back);
       pos.y += 5;
       if (this.indoors) this.indoors.limitCamera(eye, pos);
+      else if (this.caves?.at(this.position)) this.caves.limitCamera(eye, pos);
       else {
         const g = this.island.heightAt(pos.x, pos.z);
         if (pos.y < g + 2) pos.y = g + 2;
