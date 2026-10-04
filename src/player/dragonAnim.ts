@@ -245,17 +245,24 @@ export class DragonAnimator {
     if (this.flapAmp > 0.06 || !level) this.flap += dt * this.flapRate * TAU;
 
     const th = this.stroke(this.flap), a = this.flapAmp;
-    const up = Math.max(0, -Math.sin(th));
+    // The wing works like an arm, one joint after another. Early in the
+    // upstroke the elbow folds and then the wrist; near the top the elbow
+    // pushes the wing open again and the wrist snaps straight just as the
+    // downstroke starts, so the whole wing is locked out for the power stroke.
+    const u = (th / Math.PI + 1) % 2; // 0..1 upstroke, 1..2 downstroke
+    const fold = (x: number) => smoothstep(x, 0, 0.3) * (1 - smoothstep(x, 0.6, 0.9));
+    const elbowFold = fold(u), wristFold = fold(u - 0.12);
+    const press = th < Math.PI ? Math.sin(th) : 0; // hand pressing down through the downstroke
     const glide = mixWing(GLIDE, TUCK, this.dive);
     const wp: WingPose = {
-      sweep: glide.sweep + a * (0.18 * Math.sin(th) - 0.22 * up),
+      sweep: glide.sweep + a * (0.15 * Math.sin(th) - 0.3 * elbowFold),
       lift: glide.lift + a * (0.2 + 0.65 * Math.cos(th)),
       twist: glide.twist - a * 0.28 * Math.sin(th),
-      elbow: glide.elbow - a * 0.95 * up,
-      elbowLift: glide.elbowLift + a * 0.32 * Math.cos(th - 0.8),
-      wrist: glide.wrist + a * 1.15 * up,
-      wristLift: glide.wristLift + a * 0.38 * Math.cos(th - 1.4),
-      fan: glide.fan - a * 0.45 * up,
+      elbow: glide.elbow - a * 1.25 * elbowFold,
+      elbowLift: glide.elbowLift - a * 0.3 * elbowFold,
+      wrist: glide.wrist + a * 1.5 * wristFold,
+      wristLift: glide.wristLift - a * (0.2 * wristFold + 0.12 * press),
+      fan: glide.fan - a * 0.55 * wristFold,
       droop: glide.droop,
     };
     for (const w of [b.wings.l, b.wings.r]) this.wing(p, w, wp);

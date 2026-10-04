@@ -448,17 +448,18 @@ export function makeDragon(color = '#16131c', accent = '#3b2f52'): DragonModel {
     const A = FLANK.clone().setX(FLANK.x * s);
     const Pe = new THREE.Vector3(E.x + s * 0.3, 3.4, 2.75);
 
-    // Arm and finger bones: thin tubes.
-    const bonesTube = (from: THREE.Vector3, to: THREE.Vector3, r0: number, r1: number, w0: Weights, w1: Weights, steps = 3) => {
+    // Arm and finger bones: thin rigid tubes. Each stays on its own bone except
+    // for a short crease at each end, so the wing bends at its joints like an arm.
+    const bonesTube = (from: THREE.Vector3, to: THREE.Vector3, r0: number, r1: number, own: Weights, start?: Weights, end?: Weights) => {
       const dir = to.clone().sub(from).normalize();
       const side = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
       const up = new THREE.Vector3().crossVectors(side, dir).normalize();
+      const crease = Math.min(0.2, 0.25 / from.distanceTo(to));
       const rs: { pts: Pt[]; c: THREE.Vector3 }[] = [];
-      for (let i = 0; i <= steps; i++) {
-        const t = i / steps;
+      for (const t of [0, crease, 0.5, 1 - crease, 1]) {
         const c = from.clone().lerp(to, t);
         const r = THREE.MathUtils.lerp(r0, r1, t);
-        const w = mix(w0, w1, t);
+        const w = t === 0 && start ? mix(own, start, 0.5) : t === 1 && end ? mix(own, end, 0.5) : own;
         const pts: Pt[] = [];
         for (let j = 0; j < 5; j++) {
           const a = (j / 5) * Math.PI * 2;
@@ -468,24 +469,29 @@ export function makeDragon(color = '#16131c', accent = '#3b2f52'): DragonModel {
       }
       wingSkin.tube(rs, (_u, r, j) => jitter(bodyC, r, j));
     };
-    const arm: Weights = [[wb.arm, 1]], fore: Weights = [[wb.forearm, 1]];
-    bonesTube(S.clone().setX(S.x - s * 0.3), E, 0.3, 0.2, mix(arm, [[chest, 1]], 0.4), mix(arm, fore, 0.5));
-    bonesTube(E, W, 0.2, 0.13, mix(arm, fore, 0.5), mix(fore, [[wb.hand, 1]], 0.5));
-    FINGERS.forEach((_, i) => bonesTube(W, tips[i], 0.11, 0.03, mix(fore, [[wb.fingers[i], 1]], 0.5), [[wb.fingers[i], 1]], 2));
+    const arm: Weights = [[wb.arm, 1]], fore: Weights = [[wb.forearm, 1]], hand: Weights = [[wb.hand, 1]];
+    bonesTube(S.clone().setX(S.x - s * 0.3), E, 0.3, 0.2, arm, [[chest, 1]], fore);
+    bonesTube(E, W, 0.2, 0.13, fore, arm, hand);
+    FINGERS.forEach((_, i) => bonesTube(W, tips[i], 0.11, 0.03, [[wb.fingers[i], 1]], hand));
     // Thumb claw at the wrist.
     wingSkin.shape(new THREE.ConeGeometry(0.08, 0.45, 4).translate(0, 0.22, 0), place(W, new THREE.Vector3(s * 0.2, 0.2, -1)), [[wb.hand, 1]], hornC);
 
     // The membrane, in panels between "ribs" running from the leading edge back
-    // to the trailing edge. Each rib has weights at its front and back.
+    // to the trailing edge. Along the leading edge it sticks to the bone there
+    // (hand, forearm or arm); towards the back it follows the fingers and flank.
+    // Neighbouring panels share a rib, and give it the same weights so no crack opens.
     interface Rib { lead: THREE.Vector3; trail: THREE.Vector3; wLead: Weights; wTrail: Weights; finger: boolean }
     const ribs: Rib[] = [
-      ...FINGERS.map((_, i) => ({ lead: W, trail: tips[i], wLead: fore, wTrail: [[wb.fingers[i], 1]] as Weights, finger: true })),
+      ...FINGERS.map((_, i) => ({ lead: W, trail: tips[i], wLead: hand, wTrail: [[wb.fingers[i], 1]] as Weights, finger: true })),
       { lead: E, trail: Pe, wLead: fore, wTrail: [[wb.forearm, 0.3], [wb.arm, 0.3], [hips, 0.4]] as Weights, finger: false },
       { lead: S, trail: A, wLead: arm, wTrail: [[hips, 1]] as Weights, finger: false },
     ];
+    // How fast weight moves from the leading edge to the back: quickly along a finger, which is rigid.
+    const reach = (r: Rib, t: number) => (r.finger ? Math.min(1, t * 4) : t);
     const NU = 4, NT = 5;
     for (let j = 0; j < ribs.length - 1; j++) {
       const r0 = ribs[j], r1 = ribs[j + 1];
+      const edge = r1.finger ? hand : r0.finger ? fore : arm;
       const chord = r0.trail.distanceTo(r1.trail);
       const leadMid = r0.lead.clone().lerp(r1.lead, 0.5);
       const inward = leadMid.sub(r0.trail.clone().lerp(r1.trail, 0.5)).normalize();
@@ -497,8 +503,9 @@ export function makeDragon(color = '#16131c', accent = '#3b2f52'): DragonModel {
           const t = it / NT;
           const a = r0.lead.clone().lerp(r0.trail, t), b = r1.lead.clone().lerp(r1.trail, t);
           const p = a.lerp(b, u).addScaledVector(inward, chord * 0.22 * 4 * u * (1 - u) * t * t);
-          const wt = (r: Rib) => mix(r.wLead, r.wTrail, r.finger ? Math.min(1, t * 4) : t);
-          col.push({ p, w: mix(wt(r0), wt(r1), u) });
+          const front = u === 0 ? r0.wLead : u === 1 ? r1.wLead : edge;
+          const back = mix(r0.wTrail, r1.wTrail, u);
+          col.push({ p, w: mix(front, back, THREE.MathUtils.lerp(reach(r0, t), reach(r1, t), u)) });
         }
         grid.push(col);
       }
