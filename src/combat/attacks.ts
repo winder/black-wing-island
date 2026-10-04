@@ -158,6 +158,9 @@ export class ClawSwipe {
 
   get swinging() { return this.t < CLAW_SWING; }
 
+  /** How far through the swipe (0..1) and with which paw, for the dragon model; null when not swiping. */
+  get pose() { return this.t < CLAW_SWING * 1.6 ? { t: this.t / (CLAW_SWING * 1.6), side: this.side } : null; }
+
   update(dt: number, input: Input, player: Player, targets: Target[], onSwipe: () => void, allowed = true) {
     this.t += dt;
     const ready = allowed && this.t > CLAW_COOLDOWN && !player.vitals.knockedOut;

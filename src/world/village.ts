@@ -11,7 +11,9 @@ const VILLAGER_COLORS: [string, string][] = [
   ['#d35400', '#784212'], ['#8e44ad', '#f5b7b1'], ['#f4d03f', '#a04000'],
 ];
 
-interface Villager { model: DragonModel; target: THREE.Vector2; pause: number; home: { x: number; z: number; r: number }; added?: boolean }
+interface Villager { model: DragonModel; target: THREE.Vector2; pause: number; home: { x: number; z: number; r: number }; added?: boolean; velocity: THREE.Vector3 }
+
+const VILLAGER_SPEED = 3;
 
 export class Village {
   readonly group = new THREE.Group();
@@ -78,10 +80,10 @@ export class Village {
       model.root.scale.setScalar(0.8 + hash2(i, 3, 9) * 0.3);
       const a = (i / VILLAGER_COLORS.length) * Math.PI * 2;
       model.root.position.set(cx + Math.cos(a) * 30, y0, cz + Math.sin(a) * 30);
-      model.pose(0, 0);
+      model.update(0, { mode: 'walk', velocity: new THREE.Vector3(), yaw: 0 }); // fold the wings
       this.group.add(model.root);
       const home = { x: cx, z: cz, r: VILLAGE_RADIUS - 50 };
-      this.villagers.push({ model, target: this.pickSpot(home), pause: hash2(i, 4, 9) * 5, home });
+      this.villagers.push({ model, target: this.pickSpot(home), pause: hash2(i, 4, 9) * 5, home, velocity: new THREE.Vector3() });
     }
   }
 
@@ -96,9 +98,9 @@ export class Village {
     const model = makeDragon(body, accent);
     model.root.scale.setScalar(0.8 + hash2(seed, 3, 9) * 0.3);
     model.root.position.set(at.x, this.island.heightAt(at.x, at.z), at.z);
-    model.pose(0, 0);
+    model.update(0, { mode: 'walk', velocity: new THREE.Vector3(), yaw: 0 });
     this.group.add(model.root);
-    this.villagers.push({ model, target: this.pickSpot(village), pause: 2, home: village, added: true });
+    this.villagers.push({ model, target: this.pickSpot(village), pause: 2, home: village, added: true, velocity: new THREE.Vector3() });
   }
 
   /** Send away villagers who came with built Houses (when switching save slots). */
@@ -107,25 +109,34 @@ export class Village {
     this.villagers = this.villagers.filter((v) => !v.added);
   }
 
+  /** Where the player is, so far-off villagers can skip animating. */
+  readonly viewer = new THREE.Vector3();
+
   update(dt: number, nightness: number) {
     this.t += dt;
     this.flames.scale.set(1 + Math.sin(this.t * 9) * 0.08, 1 + Math.sin(this.t * 13) * 0.15, 1 + Math.cos(this.t * 7) * 0.08);
     this.fire.intensity = (800 + 3500 * nightness) * (1 + Math.sin(this.t * 17) * 0.1);
     this.villagers.forEach((v) => {
       const root = v.model.root;
+      const vel = v.velocity;
       if (v.pause > 0) {
         v.pause -= dt;
-        v.model.pose(0, 0);
-        return;
+        vel.multiplyScalar(Math.exp(-6 * dt));
+      } else {
+        const to = new THREE.Vector2(v.target.x - root.position.x, v.target.y - root.position.z);
+        const d = to.length();
+        if (d < 2) { v.pause = 3 + Math.random() * 8; v.target = this.pickSpot(v.home); }
+        // Turn towards the target, then walk the way it's facing.
+        const want = Math.atan2(-to.x, -to.y);
+        const turn = Math.atan2(Math.sin(want - root.rotation.y), Math.cos(want - root.rotation.y));
+        root.rotation.y += THREE.MathUtils.clamp(turn, -1.5 * dt, 1.5 * dt);
+        const speed = VILLAGER_SPEED * Math.max(0, Math.cos(turn));
+        vel.set(-Math.sin(root.rotation.y), 0, -Math.cos(root.rotation.y)).multiplyScalar(speed);
       }
-      const to = new THREE.Vector2(v.target.x - root.position.x, v.target.y - root.position.z);
-      const d = to.length();
-      if (d < 2) { v.pause = 3 + Math.random() * 8; v.target = this.pickSpot(v.home); return; }
-      to.divideScalar(d);
-      root.position.x += to.x * 3 * dt;
-      root.position.z += to.y * 3 * dt;
+      root.position.addScaledVector(vel, dt);
       root.position.y = this.island.heightAt(root.position.x, root.position.z);
-      root.rotation.y = Math.atan2(-to.x, -to.y);
+      // Only animate villagers near enough to see.
+      if (root.position.distanceToSquared(this.viewer) < 600 * 600) v.model.update(dt, { mode: 'walk', velocity: vel, yaw: root.rotation.y });
     });
   }
 }

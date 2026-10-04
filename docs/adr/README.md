@@ -7,3 +7,4 @@
 - [0006](0006-coastline-from-drawing.md) Coastline comes from Caitlin's drawing
 - [0007](0007-combat.md) Combat (Version 2)
 - [0008](0008-materials-and-building.md) Materials and building (Version 3)
+- [0009](0009-skinned-dragons-procedural-animation.md) Skinned dragons with procedural animation

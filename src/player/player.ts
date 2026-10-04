@@ -30,33 +30,28 @@ export class Player {
   mode: Mode = 'walk';
   underwater = false;
   thirdPerson = false;
-  /** Wing beat phase, for animation and sound. */
+  /** Wing beat phase, for sound. */
   flap = 0;
-  flapRate = 0;
+  /** Set by the attacks each frame, so the model can open its mouth or swipe a paw. */
+  breathing = false;
+  swipe: { t: number; side: number } | null = null;
   readonly model: DragonModel;
   readonly vitals = new Vitals();
   /** While something (a Kraken tentacle) holds the dragon, it is dragged to this point and can't move. */
   heldAt: THREE.Vector3 | null = null;
   private fpWings: DragonModel;
-  private spread = 0;
 
   constructor(private island: Island, private camera: THREE.PerspectiveCamera, scene: THREE.Scene) {
     this.model = makeDragon();
     scene.add(this.model.root);
-    // First-person wings: a second pair hung off the camera so they show at the screen edges.
+    // First-person wings: a second dragon hung under the camera with only its
+    // wings showing, swept forward so they're in view at the screen edges.
     this.fpWings = makeDragon();
-    // Each wing sits in a holder swept forward, so its edge is in view.
-    for (const [w, side] of [[this.fpWings.leftWing, -1], [this.fpWings.rightWing, 1]] as const) {
-      const holder = new THREE.Group();
-      holder.position.set(side * 1.9, -1.1, -1.8);
-      holder.rotation.y = side * 0.7;
-      holder.scale.setScalar(0.33);
-      w.removeFromParent();
-      w.position.set(0, 0, 0);
-      w.visible = false;
-      holder.add(w);
-      camera.add(holder);
-    }
+    this.fpWings.body.visible = this.fpWings.eyes.visible = false;
+    this.fpWings.anim.extraSweep = 0.9;
+    this.fpWings.root.position.set(0, -2.2, 0.6);
+    this.fpWings.root.scale.setScalar(0.3);
+    camera.add(this.fpWings.root);
   }
 
   get state(): PlayerState {
@@ -219,20 +214,22 @@ export class Player {
 
   private animate(dt: number) {
     const flying = this.mode === 'fly';
-    this.spread = THREE.MathUtils.damp(this.spread, flying ? 1 : 0, 5, dt);
-    const climbing = flying ? Math.max(0, this.velocity.y) / 14 : 0;
-    this.flapRate = flying ? 2.2 + climbing * 3 + (this.velocity.length() < 6 ? 1.5 : 0) : this.mode === 'swim' ? 1 : 0;
-    this.flap += dt * this.flapRate * Math.PI * 2 * 0.5;
-    this.model.pose(this.spread, this.flap);
-    this.fpWings.pose(this.spread, this.flap);
-
     const m = this.model.root;
     m.position.copy(this.position);
     m.rotation.set(0, this.yaw, 0, 'YXZ');
     if (flying) m.rotation.x = THREE.MathUtils.clamp(this.velocity.y / 40, -0.5, 0.5);
     m.visible = this.thirdPerson;
-    // First-person wings only show while flying and when spread enough to see.
-    this.fpWings.leftWing.visible = this.fpWings.rightWing.visible = !this.thirdPerson && this.spread > 0.2;
+
+    const motion = {
+      mode: this.mode, velocity: this.velocity, yaw: this.yaw, pitch: this.pitch,
+      underwater: this.underwater, breathing: this.breathing, swipe: this.swipe,
+    };
+    this.model.update(dt, motion);
+    this.flap = this.model.anim.flap;
+    // First-person wings only show while flying, once spread enough to see.
+    const fp = this.fpWings.root;
+    fp.visible = !this.thirdPerson && this.model.anim.flying > 0.2;
+    if (fp.visible) this.fpWings.update(dt, { ...motion, pitch: 0, breathing: false, swipe: null });
   }
 
   private placeCamera() {

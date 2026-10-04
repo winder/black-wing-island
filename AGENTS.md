@@ -136,6 +136,9 @@ npm run build      # typecheck + production build
 npm run island     # rebuild public/island/* and assets/island-preview.png from the drawing
 npx tsx tools/shot.ts out.png "x=..&z=..&y=..&yaw=..&pitch=..&mode=fly&time=0.5&third&map" [waitMs] [frames]
                    # headless screenshot (needs `npm run dev` running); "title" for the title screen
+PAGE=tools/dragon.html npx tsx tools/shot.ts out.png "anim=walk&t=1[&cam=x,y,z,lx,ly,lz][&strip=9&step=0.08]"
+                   # dragon viewer: four views (or one camera, or a filmstrip) of one animation;
+                   # anims: idle walk run turn fly climb glide dive swim under fire swipe takeoff land
 ```
 
 ```bash

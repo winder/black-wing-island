@@ -303,6 +303,8 @@ function updateCombat(dt: number) {
     if (hit.kind === 'snowball') sound.hit();
   });
   v.update(dt, fire.breathing);
+  player.breathing = fire.breathing;
+  player.swipe = claws.pose;
 
   // Knocked out: wait a moment, then wake up in the last village with nothing lost.
   if (v.knockedOut) {
@@ -371,6 +373,7 @@ renderer.setAnimationLoop(() => {
   const focus = playing ? player.position : new THREE.Vector3(0, 0, 0);
   terrain.update(focus.x, focus.z, 6);
   sky.update(playing && !paused ? dt : dt * 0.2, camera.position, scene);
+  village.viewer.copy(player.position);
   village.update(dt, 1 - THREE.MathUtils.smoothstep(Math.sin((sky.time - 0.25) * Math.PI * 2), -0.1, 0.2));
   sheep.update(dt, player.position);
   ocean.position.set(camera.position.x, 0, camera.position.z);
