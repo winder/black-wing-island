@@ -223,7 +223,8 @@ function jitter(c: THREE.Color, a: number, b: number) {
 
 // ---------- the dragon ----------
 
-export function makeDragon(color = '#16131c', accent = '#3b2f52'): DragonModel {
+/** `sheen`: a glossy tint on the scales (an Accessory). */
+export function makeDragon(color = '#16131c', accent = '#3b2f52', sheen?: string): DragonModel {
   const bodyC = new THREE.Color(color), bellyC = new THREE.Color(accent);
   const membraneC = new THREE.Color(accent).lerp(new THREE.Color(color), 0.35);
   const hornC = new THREE.Color(accent).lerp(new THREE.Color('#e8dcc0'), 0.45);
@@ -530,8 +531,11 @@ export function makeDragon(color = '#16131c', accent = '#3b2f52'): DragonModel {
     root.add(m);
     return m;
   };
-  const body = mesh(bodySkin, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
-  const wings = mesh(wingSkin, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide }));
+  const scales = (side: THREE.Side) => sheen
+    ? new THREE.MeshPhongMaterial({ vertexColors: true, flatShading: true, side, specular: new THREE.Color(sheen).multiplyScalar(0.45), shininess: 70, emissive: new THREE.Color(sheen).multiplyScalar(0.04) })
+    : new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side });
+  const body = mesh(bodySkin, scales(THREE.FrontSide));
+  const wings = mesh(wingSkin, scales(THREE.DoubleSide));
   const eyes = mesh(eyeSkin, new THREE.MeshBasicMaterial({ vertexColors: true }));
 
   const bones: DragonBones = { hips, chest, neck, head, jaw, tail, legs, wings: wingBones, all };

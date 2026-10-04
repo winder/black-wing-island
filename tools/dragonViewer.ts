@@ -1,10 +1,11 @@
 // Dragon viewer: the dragon from four sides, doing one animation.
 // http://localhost:5173/tools/dragon.html?anim=walk[&t=1.3][&speed=9][&color=#c0392b,#f1c40f][&one]
-// &cam=x,y,z[,lookx,looky,lookz] for a single close view.
+// &cam=x,y,z[,lookx,looky,lookz] for a single close view. &crown &amulet &sheen=#ffcf5a to dress it.
 // Anims: idle walk run turn fly climb glide dive swim under fire swipe takeoff land.
 // With t, the animation is simulated to that time and frozen (for screenshots).
 import * as THREE from 'three';
 import { makeDragon } from '../src/player/dragonModel';
+import { wear } from '../src/player/accessories';
 import type { DragonMotion } from '../src/player/dragonAnim';
 
 const q = new URLSearchParams(location.search);
@@ -26,7 +27,8 @@ const grid = new THREE.GridHelper(400, 100, '#4d7a33', '#5d8f3e');
 grid.position.y = 0.01;
 scene.add(grid);
 
-const dragon = makeDragon(color, accent);
+const dragon = makeDragon(color, accent, q.get('sheen') ?? undefined);
+wear(dragon, { crown: q.has('crown'), amulet: q.has('amulet') });
 scene.add(dragon.root);
 
 const views: [string, THREE.Vector3, THREE.Vector3][] = [

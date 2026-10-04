@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { Input } from '../input';
 import { Player } from '../player/player';
-import { Island } from '../world/island';
+import type { Floor } from '../monsters/monster';
 import { HitSphere, coneHitsSphere, spheresTouch } from './hits';
 
 export type DamageKind = 'fire' | 'claw';
@@ -35,6 +35,9 @@ export class FireBreath {
   readonly object: THREE.Points;
   readonly light = new THREE.PointLight("#ff8a2a", 0, 60, 1.6);
   breathing = false;
+  /** Hotter Fire raises these: damage, and how far the flames reach. */
+  power = 1;
+  reach = 1;
   private pos = new Float32Array(MAX_PARTICLES * 3);
   private vel = new Float32Array(MAX_PARTICLES * 3);
   private age = new Float32Array(MAX_PARTICLES).fill(Infinity);
@@ -43,7 +46,8 @@ export class FireBreath {
   private next = 0;
   private emitCarry = 0;
 
-  constructor(private island: Island) {
+  /** What the flames splash along: the Island, or an Interior's floor. */
+  constructor(public island: Floor) {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
     this.ageAttr = new THREE.BufferAttribute(new Float32Array(MAX_PARTICLES).fill(1), 1);
@@ -87,7 +91,7 @@ export class FireBreath {
         const i = this.next;
         this.next = (this.next + 1) % MAX_PARTICLES;
         const spread = new THREE.Vector3().randomDirection().multiplyScalar(0.12 + Math.random() * 0.08);
-        const v = dir.clone().add(spread).normalize().multiplyScalar(FIRE_SPEED * (0.8 + Math.random() * 0.4)).add(player.velocity);
+        const v = dir.clone().add(spread).normalize().multiplyScalar(FIRE_SPEED * this.reach * (0.8 + Math.random() * 0.4)).add(player.velocity);
         const start = mouth.clone().addScaledVector(dir, 2 + Math.random() * 2);
         this.pos.set([start.x, start.y, start.z], i * 3);
         this.vel.set([v.x, v.y, v.z], i * 3);
@@ -97,8 +101,8 @@ export class FireBreath {
       // Burn whatever is in the cone of fire.
       for (const t of targets) {
         if (!t.alive) continue;
-        const hit = t.hitSpheres().findIndex((s) => coneHitsSphere(mouth, dir, FIRE_RANGE, FIRE_HALF_ANGLE, s));
-        if (hit >= 0) t.takeHit(FIRE_DPS * dt, 'fire', mouth, hit);
+        const hit = t.hitSpheres().findIndex((s) => coneHitsSphere(mouth, dir, FIRE_RANGE * this.reach, FIRE_HALF_ANGLE, s));
+        if (hit >= 0) t.takeHit(FIRE_DPS * this.power * dt, 'fire', mouth, hit);
       }
     }
 

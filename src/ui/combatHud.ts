@@ -1,7 +1,7 @@
 // On-screen combat info: the dragon's health and fire, a red flash when hurt,
 // the health bar of the monster you're fighting, and the knocked-out screen.
 
-import { MAX_FIRE, MAX_HEALTH, Vitals } from '../combat/vitals';
+import { Vitals } from '../combat/vitals';
 import { Monster } from '../monsters/monster';
 
 export class CombatHud {
@@ -39,9 +39,9 @@ export class CombatHud {
   }
 
   update(v: Vitals, foe: Monster | null) {
-    this.health.style.width = `${(v.health / MAX_HEALTH) * 100}%`;
+    this.health.style.width = `${(v.health / v.maxHealth) * 100}%`;
     this.health.classList.toggle('low', v.health < 30);
-    this.fire.style.width = `${(v.fire / MAX_FIRE) * 100}%`;
+    this.fire.style.width = `${(v.fire / v.maxFire) * 100}%`;
     this.fireBox.classList.toggle('empty', v.outOfFire);
     this.flash.style.opacity = String(v.hurtFlash * 0.7);
     this.foe.classList.toggle('hidden', !foe);

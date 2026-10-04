@@ -26,6 +26,7 @@ import { BOSS_GOLD } from './monsters/bosses';
 import { Quest, QuestState, Quests, rewardText } from './quests/quests';
 import { ACCESSORIES, AccessoryId, POWERS, Rewards } from './quests/rewards';
 import { Giver, QuestGivers } from './quests/givers';
+import { Treasures } from './ui/treasures';
 import type { DragonModel } from './player/dragonModel';
 import { pushDragonOut } from './world/collide';
 import { SheepFlocks } from './world/sheep';
@@ -150,7 +151,7 @@ const outside = [terrain.group, village.group, sheep.group, dens.group, gatherin
 const interiors = new Interiors(scene, ui, (inside) => {
   for (const o of outside) o.visible = !inside;
   sky.indoors = inside;
-  projectiles.island = inside ? interiors.current!.interior : island;
+  projectiles.island = fire.island = inside ? interiors.current!.interior : island;
   if (inside) {
     const where = interiors.current!.place;
     showPlace(where.name.replace(/^the /, 'The '));
@@ -219,6 +220,28 @@ quests.onComplete = (q: Quest) => {
 const givers = new QuestGivers(hudEl, quests, inventory, (id) => places.beaten.has(id), (t) => inventoryHud.toast(t));
 scene.add(givers.group);
 buildings.addSolid({ colliders: givers.colliders, obstacles: [] });
+const treasures = new Treasures(hudEl, rewards);
+/** Powers change the dragon's numbers; Accessories change how it looks. */
+rewards.onChange = () => {
+  const v = player.vitals;
+  const tough = rewards.has('toughScales'), deep = rewards.has('deepLungs'), hot = rewards.has('hotterFire');
+  v.maxHealth = tough ? 150 : 100;
+  v.armor = tough ? 0.75 : 1;
+  v.maxFire = deep ? 160 : 100;
+  v.refill = deep ? 1.5 : 1;
+  v.health = Math.min(v.health, v.maxHealth);
+  v.fire = Math.min(v.fire, v.maxFire);
+  fire.power = hot ? 1.6 : 1;
+  fire.reach = hot ? 1.3 : 1;
+  player.speedBoost = rewards.has('swiftWings') ? 1.35 : 1;
+  const scales = rewards.worn.scales ? ACCESSORIES[rewards.worn.scales] : null;
+  const sheen = rewards.worn.sheen ? ACCESSORIES[rewards.worn.sheen] : null;
+  const look = { color: scales?.color, accent: scales?.accent, sheen: sheen?.color, crown: rewards.worn.head === 'crown', amulet: rewards.worn.neck === 'rubyAmulet' };
+  const key = JSON.stringify(look);
+  if (key !== lastLook) { lastLook = key; player.dress(look); }
+  treasures.draw();
+};
+let lastLook = JSON.stringify({ crown: false, amulet: false });
 /** Each Dungeon's hoard holds a new scale colour. */
 const HOARD_SCALES: Record<string, AccessoryId> = { 'dungeon-2': 'emeraldScales', 'dungeon-3': 'crimsonScales', 'dungeon-4': 'midnightScales' };
 
@@ -428,7 +451,7 @@ if (params.has('debug')) {
   }
   input.forceLocked = params.has('mouse');
   if (params.has('rich')) inventory.state = { wood: 999, stone: 999, gold: 999 };
-  (window as unknown as { game: unknown }).game = { quests, rewards, givers, places, caves, interiors, island, player, terrain, sky, worldMap, renderer, dens, fire, claws, input, inventory, buildings, buildMode, gathering };
+  (window as unknown as { game: unknown }).game = { treasures, quests, rewards, givers, places, caves, interiors, island, player, terrain, sky, worldMap, renderer, dens, fire, claws, input, inventory, buildings, buildMode, gathering };
 } else {
   showTitle();
 }
@@ -507,6 +530,8 @@ renderer.setAnimationLoop(() => {
   if (playing && !paused) {
     const inside = interiors.current;
     if (input.wasPressed('KeyM') && !inside) worldMap.toggle();
+    if (input.wasPressed('KeyI')) treasures.toggle();
+    treasures.update(input);
     const wasSwimming = player.mode === 'swim';
     if (!inside) buildMode.update(input, camera, player.position);
     if (!interiors.busy) player.update(dt, input);

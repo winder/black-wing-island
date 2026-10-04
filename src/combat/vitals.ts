@@ -10,6 +10,13 @@ const FIRE_REFILL = 16;    // fire per second while not breathing
 const FIRE_MIN_RESTART = 15; // after running dry, wait for this much before breathing again
 
 export class Vitals {
+  /** Powers raise these. */
+  maxHealth = MAX_HEALTH;
+  maxFire = MAX_FIRE;
+  /** How much of each hit gets through (Tough Scales lowers it). */
+  armor = 1;
+  /** How fast fire refills (Deep Lungs raises it). */
+  refill = 1;
   health = MAX_HEALTH;
   fire = MAX_FIRE;
   sinceHurt = Infinity;
@@ -22,6 +29,7 @@ export class Vitals {
 
   hurt(amount: number) {
     if (this.knockedOut || amount <= 0) return;
+    amount *= this.armor;
     this.health = Math.max(0, this.health - amount);
     this.sinceHurt = 0;
     this.hurtFlash = Math.min(1, this.hurtFlash + 0.25 + amount / 40);
@@ -39,14 +47,14 @@ export class Vitals {
   update(dt: number, breathing: boolean) {
     this.sinceHurt += dt;
     this.hurtFlash = Math.max(0, this.hurtFlash - dt * 1.5);
-    if (!this.knockedOut && this.sinceHurt > REGEN_DELAY) this.health = Math.min(MAX_HEALTH, this.health + REGEN_RATE * dt);
-    if (!breathing) this.fire = Math.min(MAX_FIRE, this.fire + FIRE_REFILL * dt);
+    if (!this.knockedOut && this.sinceHurt > REGEN_DELAY) this.health = Math.min(this.maxHealth, this.health + REGEN_RATE * dt);
+    if (!breathing) this.fire = Math.min(this.maxFire, this.fire + FIRE_REFILL * this.refill * dt);
     if (this.outOfFire && this.fire >= FIRE_MIN_RESTART) this.outOfFire = false;
   }
 
   revive() {
-    this.health = MAX_HEALTH;
-    this.fire = MAX_FIRE;
+    this.health = this.maxHealth;
+    this.fire = this.maxFire;
     this.knockedOut = false;
     this.outOfFire = false;
     this.sinceHurt = Infinity;

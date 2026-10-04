@@ -8,6 +8,7 @@ import { Island } from '../world/island';
 import type { Indoors } from '../places/interior';
 import type { Caves } from '../places/caves';
 import { makeDragon, DragonModel } from './dragonModel';
+import { wear } from './accessories';
 
 export type Mode = 'walk' | 'fly' | 'swim';
 
@@ -37,18 +38,20 @@ export class Player {
   /** Set by the attacks each frame, so the model can open its mouth or swipe a paw. */
   breathing = false;
   swipe: { t: number; side: number } | null = null;
-  readonly model: DragonModel;
+  model: DragonModel;
   readonly vitals = new Vitals();
   /** While something (a Kraken tentacle) holds the dragon, it is dragged to this point and can't move. */
   heldAt: THREE.Vector3 | null = null;
   private fpWings: DragonModel;
+  /** Swift Wings: how much faster flying is. */
+  speedBoost = 1;
   /** Set while inside an Interior: its floor, ceiling and walls replace the Island's. */
   indoors: Indoors | null = null;
   /** The Island's caves: inside a tunnel, its floor and roof replace the ground. */
   caves: Caves | null = null;
   private probe = new THREE.Vector3();
 
-  constructor(private island: Island, private camera: THREE.PerspectiveCamera, scene: THREE.Scene) {
+  constructor(private island: Island, private camera: THREE.PerspectiveCamera, private scene: THREE.Scene) {
     this.model = makeDragon();
     scene.add(this.model.root);
     // First-person wings: a second dragon hung under the camera with only its
@@ -58,7 +61,29 @@ export class Player {
     this.fpWings.anim.extraSweep = 0.9;
     this.fpWings.root.position.set(0, -2.2, 0.6);
     this.fpWings.root.scale.setScalar(0.3);
+    this.fpWings.root.visible = false;
     camera.add(this.fpWings.root);
+  }
+
+  /** Change how the dragon looks: scale colours, a sheen, a crown, an amulet. */
+  dress(look: { color?: string; accent?: string; sheen?: string; crown: boolean; amulet: boolean }) {
+    const color = look.color ?? '#16131c', accent = look.accent ?? '#3b2f52';
+    this.scene.remove(this.model.root);
+    const wasVisible = this.model.root.visible;
+    this.model = makeDragon(color, accent, look.sheen);
+    this.model.root.visible = wasVisible;
+    wear(this.model, look);
+    this.scene.add(this.model.root);
+    // The first-person wings match.
+    const fp = makeDragon(color, accent, look.sheen);
+    fp.body.visible = fp.eyes.visible = false;
+    fp.anim.extraSweep = this.fpWings.anim.extraSweep;
+    fp.root.position.copy(this.fpWings.root.position);
+    fp.root.scale.copy(this.fpWings.root.scale);
+    fp.root.visible = this.fpWings.root.visible;
+    this.camera.remove(this.fpWings.root);
+    this.camera.add(fp.root);
+    this.fpWings = fp;
   }
 
   get state(): PlayerState {
@@ -178,7 +203,7 @@ export class Player {
       else if (here.water - here.ground > SWIM_DEPTH && p.y < here.water) this.mode = 'swim';
       else if (p.y > here.ground + 3) this.mode = 'fly'; // walked off a cliff: spread wings
     } else if (this.mode === 'fly') {
-      const speed = fast ? BOOST_SPEED : FLY_SPEED;
+      const speed = (fast ? BOOST_SPEED : FLY_SPEED) * this.speedBoost;
       const look = this.lookDir();
       const want = new THREE.Vector3()
         .addScaledVector(look, (fwd - back * 0.5) * speed)

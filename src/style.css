@@ -106,3 +106,12 @@ button.small { font-size: 14px; padding: 6px 12px; margin-left: 6px; background:
 .quest-dialog .keys b { color: var(--parchment); }
 .quest-tracker { position: absolute; top: 16px; right: 16px; max-width: 300px; padding: 10px 14px; border-radius: 10px; background: rgba(20, 12, 24, 0.6); font-size: 16px; line-height: 1.4; }
 .quest-tracker i { color: #8dff9a; }
+.treasures { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(520px, 90vw); padding: 16px 22px; border-radius: 14px; background: rgba(20, 12, 24, 0.88); border: 2px solid rgba(243, 233, 210, 0.35); }
+.treasures h3 { margin: 6px 0 8px; font-size: 22px; color: #ffd84a; }
+.treasures .row { display: flex; gap: 10px; align-items: baseline; padding: 4px 0; }
+.treasures .row b { min-width: 150px; }
+.treasures .row span { font-size: 14px; opacity: 0.85; }
+.treasures .row.locked { opacity: 0.4; }
+.treasures .row.worn b { color: #8dff9a; }
+.treasures kbd { display: inline-block; width: 22px; text-align: center; border-radius: 5px; background: var(--accent); font-family: inherit; }
+.treasures p { font-size: 14px; opacity: 0.8; margin: 8px 0 0; }
