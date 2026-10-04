@@ -18,7 +18,8 @@ export class Interiors {
   /** Where you come back out: in front of the place's doorway, facing away from it. */
   private back = { pos: new THREE.Vector3(), yaw: 0 };
   private fade: HTMLDivElement;
-  // A fixed number of lights, always in the scene, so materials never need recompiling.
+  // Torch lights, only in the scene while inside: every light costs on every pixel, even
+  // switched off. Adding them changes the shaders, so that happens during the fade.
   private lights: THREE.PointLight[] = [];
   private t = 0;
 
@@ -29,11 +30,7 @@ export class Interiors {
     this.fade = document.createElement('div');
     this.fade.className = 'fade';
     ui.appendChild(this.fade);
-    for (let i = 0; i < TORCH_LIGHTS; i++) {
-      const l = new THREE.PointLight('#ff9a50', 0, 90, 1.6);
-      this.lights.push(l);
-      scene.add(l);
-    }
+    for (let i = 0; i < TORCH_LIGHTS; i++) this.lights.push(new THREE.PointLight('#ff9a50', 0, 90, 1.6));
   }
 
   /** Where to say the player is (for saving): outside, by the door, if inside. */
@@ -48,7 +45,7 @@ export class Interiors {
     this.back.yaw = place.rot;
     const interior = new Interior(place.seed, place.kind === 'castle' ? 'castle' : 'dungeon', BIOME_STONE[place.biome]);
     const lair = this.makeLair(place, interior);
-    this.scene.add(interior.group, lair.group);
+    this.scene.add(interior.group, lair.group, ...this.lights);
     this.current = { place, interior, lair };
     player.enterIndoors(interior, interior.arrive, interior.arriveYaw);
     this.onSwap(true);
@@ -60,7 +57,7 @@ export class Interiors {
     if (this.busy || !this.current) return;
     this.busy = true;
     await this.fadeTo(1);
-    this.scene.remove(this.current.interior.group, this.current.lair.group);
+    this.scene.remove(this.current.interior.group, this.current.lair.group, ...this.lights);
     this.current.interior.dispose();
     this.current.lair.dispose();
     this.current = null;
@@ -72,11 +69,12 @@ export class Interiors {
     this.busy = false;
   }
 
-  /** Light the torches nearest the player, flickering (or, outside, any `glows` given, like cave gold). */
-  update(dt: number, at: THREE.Vector3, glows: THREE.Vector3[] = []) {
+  /** Light the torches nearest the player, flickering. */
+  update(dt: number, at: THREE.Vector3) {
     this.t += dt;
-    if (this.current && !this.busy) this.current.lair.update(dt, at);
-    const torches = [...(this.current ? this.current.interior.torches : glows)].sort((a, b) => a.distanceToSquared(at) - b.distanceToSquared(at));
+    if (!this.current) return;
+    if (!this.busy) this.current.lair.update(dt, at);
+    const torches = [...this.current.interior.torches].sort((a, b) => a.distanceToSquared(at) - b.distanceToSquared(at));
     this.lights.forEach((l, i) => {
       const p = torches[i];
       if (!p) { l.intensity = 0; return; }

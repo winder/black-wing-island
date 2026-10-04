@@ -16,6 +16,7 @@ import { Biome } from '../world/biomes';
 import { Island, VILLAGE_RADIUS } from '../world/island';
 import { hash2 } from '../world/noise';
 import { regrowth } from '../world/regrowth';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { BIOME_STONE } from './places';
 
 const CAVE_COUNT = 12;
@@ -31,7 +32,7 @@ const CAVE_MONSTER: Partial<Record<Biome, MonsterKind>> = {
   [Biome.Mountain]: 'yeti', [Biome.Volcano]: 'lavaWorm',
 };
 
-interface Vein { at: THREE.Vector3; key: string; mesh: THREE.Group; shake: number }
+interface Vein { at: THREE.Vector3; key: string; mesh: THREE.Mesh; shake: number }
 
 export interface Cave {
   id: string;
@@ -42,6 +43,8 @@ export interface Cave {
   axis: THREE.Vector3[];
   radius: number[];
   chamber: THREE.Vector3;
+  /** Everything drawn for this cave (hidden when far away: only its mouth would show anyway). */
+  look: THREE.Group;
   veins: Vein[];
   monsters: Monster[];
   box: THREE.Box3;
@@ -110,13 +113,14 @@ export class Caves {
     const big = radius.indexOf(Math.max(...radius));
     return {
       id: `cave-${this.list.length}`, biome: g.biome, mouth: new THREE.Vector3(x, g.height, z), axis, radius,
-      chamber: axis[big].clone().setY(axis[big].y - radius[big] * FLOOR), veins: [], monsters: [], box,
+      chamber: axis[big].clone().setY(axis[big].y - radius[big] * FLOOR), look: new THREE.Group(), veins: [], monsters: [], box,
     };
   }
 
   // ---------- looks ----------
 
   private build(cave: Cave) {
+    this.group.add(cave.look);
     const rock = new THREE.Color(BIOME_STONE[cave.biome]).multiplyScalar(0.75);
     const floorC = rock.clone().lerp(new THREE.Color('#3a3026'), 0.5);
     const SIDES = 14;
@@ -151,31 +155,36 @@ export class Caves {
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     geo.computeVertexNormals();
-    this.group.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide })));
+    cave.look.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide })));
 
     // Boulders along where the tunnel breaks out of the hillside hide the ragged edge of the hole.
     const stone = new THREE.MeshLambertMaterial({ color: rock.clone().multiplyScalar(1.2), flatShading: true });
+    const rocks: THREE.BufferGeometry[] = [];
+    const addRock = (g: THREE.BufferGeometry, m: THREE.Object3D) => { m.updateMatrix(); rocks.push(g.toNonIndexed().applyMatrix4(m.matrix)); };
     let last = new THREE.Vector3(Infinity, 0, 0);
     for (let k = 0; k < Math.min(rings.length, 20); k++) {
       rings[k].forEach((v, j) => {
         const ground = this.island.heightAt(v.x, v.z);
         if (Math.abs(ground - v.y) > 2.5 || v.distanceTo(last) < 5) return;
         last = v.clone();
-        const b = new THREE.Mesh(new THREE.IcosahedronGeometry(2.6 + hash2(k, j, 41) * 2.4, 0), stone);
+        const b = new THREE.Object3D();
         b.position.copy(v);
         b.rotation.set(j, k * 2, j * 3);
-        this.group.add(b);
+        addRock(new THREE.IcosahedronGeometry(2.6 + hash2(k, j, 41) * 2.4, 0), b);
       });
     }
     // Stalactites.
     for (let i = 10; i < cave.axis.length; i += 5) {
       const c = cave.axis[i], r = cave.radius[i];
       const len = 2 + hash2(i, 2, 41) * (r > 15 ? 8 : 4);
-      const s = new THREE.Mesh(new THREE.ConeGeometry(0.8 + hash2(i, 3, 41), len, 5), stone);
+      const s = new THREE.Object3D();
       s.rotation.x = Math.PI;
       s.position.set(c.x + (hash2(i, 4, 41) - 0.5) * r, c.y + r * 0.92 - len / 2, c.z + (hash2(i, 5, 41) - 0.5) * r);
-      this.group.add(s);
+      addRock(new THREE.ConeGeometry(0.8 + hash2(i, 3, 41), len, 5), s);
     }
+    // All the rocks in one mesh: a few draws per cave instead of dozens.
+    const merged = mergeGeometries(rocks);
+    if (merged) cave.look.add(new THREE.Mesh(merged, stone));
     // Gold veins glowing in the chamber walls.
     const gold = new THREE.MeshLambertMaterial({ color: '#f2c230', emissive: '#b07a00', emissiveIntensity: 1, flatShading: true });
     const big = cave.radius.indexOf(Math.max(...cave.radius));
@@ -186,15 +195,17 @@ export class Caves {
       const next = cave.axis[Math.min(i + 1, cave.axis.length - 1)];
       const side = next.clone().sub(c).setY(0).normalize().cross(up);
       const at = c.clone().addScaledVector(side, Math.cos(a) * r * 0.9).setY(c.y - r * FLOOR + 3 + hash2(v, 8, 41) * 4);
-      const mesh = new THREE.Group();
+      const crystals: THREE.BufferGeometry[] = [];
       for (let k = 0; k < 5; k++) {
-        const crystal = new THREE.Mesh(new THREE.ConeGeometry(0.5 + hash2(v, k, 43) * 0.5, 2 + hash2(k, v, 43) * 2, 5), gold);
+        const crystal = new THREE.Object3D();
         crystal.position.set((hash2(v, k, 44) - 0.5) * 3, (hash2(v, k, 45) - 0.5) * 2, (hash2(v, k, 46) - 0.5) * 3);
         crystal.rotation.set(hash2(v, k, 47) * 2 - 1, 0, hash2(v, k, 48) * 2 - 1);
-        mesh.add(crystal);
+        crystal.updateMatrix();
+        crystals.push(new THREE.ConeGeometry(0.5 + hash2(v, k, 43) * 0.5, 2 + hash2(k, v, 43) * 2, 5).toNonIndexed().applyMatrix4(crystal.matrix));
       }
+      const mesh = new THREE.Mesh(mergeGeometries(crystals)!, gold);
       mesh.position.copy(at);
-      this.group.add(mesh);
+      cave.look.add(mesh);
       cave.veins.push({ at, key: `${cave.id}-gold-${v}`, mesh, shake: 0 });
     }
   }
@@ -285,11 +296,6 @@ export class Caves {
     cam.copy(eye).addScaledVector(dir, Math.max(0, ok - 1.5));
   }
 
-  /** Glowing things to put lights on, near a point. */
-  glowsNear(pos: THREE.Vector3): THREE.Vector3[] {
-    return this.list.flatMap((c) => c.veins.filter((v) => !regrowth.isGone(v.key)).map((v) => v.at)).filter((p) => p.distanceToSquared(pos) < 200 ** 2);
-  }
-
   // ---------- gold ----------
 
   /** Gold veins near the player, as things the claws can hit. */
@@ -320,6 +326,7 @@ export class Caves {
     this.t += dt;
     const p = world.player.position;
     for (const cave of this.list) {
+      cave.look.visible = Math.hypot(cave.mouth.x - p.x, cave.mouth.z - p.z) < 1500;
       for (const v of cave.veins) {
         v.mesh.visible = !regrowth.isGone(v.key);
         v.mesh.rotation.y = Math.sin(this.t * 0.8 + v.at.x) * 0.05;

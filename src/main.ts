@@ -404,7 +404,8 @@ function showTitle() {
       <b>Mouse</b> look · <b>W A S D</b> move · <b>Shift</b> run / fly fast<br>
       <b>Space</b> take off / fly up · <b>C</b> fly down / dive · <b>V</b> see yourself · <b>M</b> map<br>
       <b>Left mouse</b> (or <b>E</b>) breathe fire · <b>Right mouse</b> (or <b>F</b>) claw swipe<br>
-      Claw trees and rocks for <b>wood</b> and <b>stone</b> · <b>B</b> build
+      Claw trees and rocks for <b>wood</b> and <b>stone</b> · <b>B</b> build<br>
+      <b>T</b> talk to villagers with a <b>!</b> · <b>I</b> treasures · fly into dark doorways and caves to explore
     </div>`;
   titleEl.querySelectorAll<HTMLButtonElement>('[data-play]').forEach((b) =>
     b.addEventListener('click', () => startGame(Number(b.dataset.play))));
@@ -549,7 +550,7 @@ renderer.setAnimationLoop(() => {
         if (door) interiors.enter(door, player);
       }
     }
-    interiors.update(dt, player.position, inside ? [] : caves.glowsNear(player.position));
+    interiors.update(dt, player.position);
     if (!inside) {
       placeBoards();
       const inCave = caves.at(player.position);
