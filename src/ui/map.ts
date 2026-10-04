@@ -17,6 +17,8 @@ export class WorldMap {
   private canvas = document.createElement('canvas');
   private ctx: CanvasRenderingContext2D;
   private dirty = true;
+  /** Places to mark once you've seen them. */
+  markers: { x: number; z: number; kind: 'castle' | 'dungeon' | 'cave'; owned?: boolean }[] = [];
 
   constructor(private island: Island, parent: HTMLElement) {
     const { W, H } = island;
@@ -86,6 +88,30 @@ export class WorldMap {
     if (this.explored[Math.round(home.py) * W + Math.round(home.px)]) {
       this.ctx.fillStyle = '#7a3b1e';
       this.ctx.fillRect(home.px - 4, home.py - 4, 8, 8);
+    }
+    // Castles, Dungeons and Caves you've found.
+    for (const m of this.markers) {
+      const { px: mx, py: my } = this.island.toMap(m.x, m.z);
+      if (!this.explored[Math.round(my) * W + Math.round(mx)]) continue;
+      const c = this.ctx;
+      c.save();
+      c.translate(mx, my);
+      c.lineWidth = 2;
+      c.strokeStyle = '#f4ead2';
+      if (m.kind === 'castle') {
+        c.fillStyle = m.owned ? '#5b3a8a' : '#1a1416';
+        c.beginPath();
+        c.moveTo(-8, 7); c.lineTo(-8, -6); c.lineTo(-4, -6); c.lineTo(-4, -2); c.lineTo(-1, -2); c.lineTo(-1, -6);
+        c.lineTo(1, -6); c.lineTo(1, -2); c.lineTo(4, -2); c.lineTo(4, -6); c.lineTo(8, -6); c.lineTo(8, 7); c.closePath();
+        c.stroke(); c.fill();
+      } else {
+        c.fillStyle = m.kind === 'dungeon' ? '#3a2a20' : '#6b5a48';
+        const r = m.kind === 'dungeon' ? 7 : 5;
+        c.beginPath();
+        c.moveTo(-r, r); c.lineTo(-r, 0); c.arc(0, 0, r, Math.PI, 0); c.lineTo(r, r); c.closePath();
+        c.stroke(); c.fill();
+      }
+      c.restore();
     }
     // The player, as an arrow.
     const { px, py } = this.island.toMap(x, z);

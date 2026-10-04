@@ -54,7 +54,13 @@ Caitlin is the game designer. Terms below are the shared language for the game; 
 | **Construction** | After a Build Site is chosen and Materials paid, the building is procedurally generated and visibly constructs itself over ~15 seconds. |
 | **Tribe** | A kind of dragon with its own powers, inspired by *Wings of Fire*. *Deferred; the original tribes come later.* |
 | **Point of Interest** | A hand-specified place (castle, dungeon, etc.) the generator must include. Added over time on top of procedural terrain. |
-| **Cave** | An underground area to explore. |
-| **Dungeon** | A dangerous enclosed area, likely with monsters. |
+| **Cave** | A real tunnel dug into a hillside, flown into with no fade. Gold to find and a few ordinary monsters; no Boss. |
+| **Dungeon** | A dark place behind a Portal. Its Boss guards a Gold Hoard. There are 3. |
+| **Portal** | A dark doorway (a castle keep's door, a dungeon's entrance) that fades into an Interior. |
+| **Interior** | The big, dark, procedurally generated halls behind a Portal: a Monster Castle's inside or a Dungeon. |
+| **Prisoner** | The dragon a Monster Castle's Boss keeps in a cage. Freed when the Boss is beaten, it becomes a Rescued Dragon. |
+| **Gold Hoard** | The pile of gold a Dungeon's Boss guards. |
+| **Quest Board** | A notice board in each village. Shows a "!" when it has a Quest, like a Quest Giver. |
+| **Accessory** | Something to wear, won from big Quests and Dungeons: a crown, a ruby amulet, a scale colour or sheen. |
 
 Tone reference: *Wings of Fire* (huge castles, dragons to save, villages, giant mountains, caves, dungeons).

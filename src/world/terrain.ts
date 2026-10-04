@@ -43,6 +43,8 @@ interface Chunk {
 export class Terrain {
   readonly group = new THREE.Group();
   private chunks = new Map<string, Chunk>();
+  /** Round spots kept free of trees and rocks. Add them before chunks are built. */
+  readonly clearings: { x: number; z: number; r: number }[] = [];
   private land: { cx: number; cz: number }[] = [];
   private groundMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide });
   private waterMat = new THREE.MeshPhongMaterial({
@@ -220,7 +222,7 @@ export class Terrain {
 
     let items: ScatterItem[] = [];
     if (n >= 32) {
-      const scatter = buildScatter(island, x0, z0, CHUNK_SIZE, n >= 64 ? 1 : 0.5);
+      const scatter = buildScatter(island, x0, z0, CHUNK_SIZE, n >= 64 ? 1 : 0.5, this.clearings);
       group.add(scatter.group);
       items = scatter.items;
     }

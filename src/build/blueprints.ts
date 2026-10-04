@@ -20,6 +20,8 @@ export interface Blueprint {
   colliders: Collider[];
   /** Where towers shoot from, in model space. */
   turrets: THREE.Vector3[];
+  /** A doorway into an Interior, in model space (Monster Castles and Dungeons). */
+  portal?: THREE.Vector3;
 }
 
 function rng(seed: number) {
@@ -45,10 +47,11 @@ const PLASTER = ['#d8c49c', '#e3d3b0', '#c9a77c', '#d9b98f'];
 const BANNERS = ['#c0392b', '#2e86c1', '#f1c40f', '#8e44ad', '#16a085'];
 const WOOD = '#7a4f2c', DARK = '#2a1b12';
 
-class Builder {
+export class Builder {
   parts: Part[] = [];
   colliders: Collider[] = [];
   turrets: THREE.Vector3[] = [];
+  portal?: THREE.Vector3;
   add(geometry: THREE.BufferGeometry, material: THREE.Material, x: number, y: number, z: number, ry = 0, rx = 0) {
     const m = new THREE.Matrix4().compose(
       new THREE.Vector3(x, y, z),
@@ -175,12 +178,15 @@ function tower(r: () => number): Builder {
   return b;
 }
 
-function castle(r: () => number): Builder {
+/** Colours for a castle; Monster Castles use their own. */
+export interface CastleLook { stone: string; roof: string; banner: string }
+
+function castle(r: () => number, look?: CastleLook): Builder {
   const b = new Builder();
   const pick = <T,>(a: T[]) => a[Math.floor(r() * a.length)];
-  const stone = mat(pick(STONE)), roof = mat(pick(ROOFS)), dark = mat(DARK);
+  const stone = mat(look?.stone ?? pick(STONE)), roof = mat(look?.roof ?? pick(ROOFS)), dark = mat(DARK);
   const half = 36 + r() * 8, wallH = 16 + r() * 3, towerH = wallH + 12 + r() * 6;
-  const banner = pick(BANNERS);
+  const banner = look?.banner ?? pick(BANNERS);
   const corners = [[-half, -half], [half, -half], [half, half], [-half, half]];
   // Curtain walls first (with a gate gap on the front), then corner towers, then the keep.
   const gate = 9;
@@ -199,6 +205,7 @@ function castle(r: () => number): Builder {
   const kw = 24 + r() * 6, kh = 30 + r() * 10;
   for (let i = 0; i < 4; i++) b.add(new THREE.BoxGeometry(kw, kh / 4, kw), stone, 0, kh / 8 + (i * kh) / 4, half * 0.25);
   b.add(new THREE.BoxGeometry(6, 10, 1), dark, 0, 5, half * 0.25 - kw / 2 - 0.3);
+  b.portal = new THREE.Vector3(0, 0, half * 0.25 - kw / 2 - 0.5);
   if (r() < 0.6) b.add(new THREE.ConeGeometry(kw * 0.75, 16, 4), roof, 0, kh + 8, half * 0.25, Math.PI / 4);
   else b.merlons(0, half * 0.25, kw * 0.6, kh, 14, stone);
   b.flag(0, kh + (r() < 0.6 ? 16 : 2), half * 0.25, banner);
@@ -208,6 +215,14 @@ function castle(r: () => number): Builder {
 
 const GENERATORS: Record<BuildingKind, (r: () => number) => Builder> = { house, villageCenter, wall: wallPiece, tower, castle };
 const FOOTPRINT: Record<BuildingKind, number> = { house: 11, villageCenter: 30, wall: 18, tower: 8, castle: 50 };
+
+/** A Monster Castle: a castle in its biome's stone, flying the banner of whoever holds it. */
+export function monsterCastle(seed: number, look: CastleLook): Blueprint {
+  const b = castle(rng(seed), look);
+  return { kind: 'castle', parts: b.parts, footprint: FOOTPRINT.castle, colliders: b.colliders, turrets: [], portal: b.portal };
+}
+
+export { mat as buildingMaterial, rng };
 
 export function blueprint(kind: BuildingKind, seed: number): Blueprint {
   const b = GENERATORS[kind](rng(seed));

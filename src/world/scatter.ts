@@ -96,7 +96,8 @@ function choose(biome: Biome, h: number, r: number): Model | null {
   }
 }
 
-export function buildScatter(island: Island, x0: number, z0: number, size: number, density: number): { group: THREE.Group; items: ScatterItem[] } {
+/** `clearings`: round spots kept free of trees and rocks (castles, dungeon doors, cave mouths). */
+export function buildScatter(island: Island, x0: number, z0: number, size: number, density: number, clearings: { x: number; z: number; r: number }[] = []): { group: THREE.Group; items: ScatterItem[] } {
   const placed: Partial<Record<Model, { key: string; m: THREE.Matrix4; center: THREE.Vector3; radius: number }[]>> = {};
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
   const up = new THREE.Vector3(0, 1, 0);
@@ -108,6 +109,7 @@ export function buildScatter(island: Island, x0: number, z0: number, size: numbe
       if (density < 1 && hash2(gx, gz, 7) > density) continue;
       const x = (gx + hash2(gx, gz, 1)) * CELL, z = (gz + hash2(gx, gz, 2)) * CELL;
       if (Math.hypot(x - island.home.x, z - island.home.z) < VILLAGE_RADIUS * 1.1) continue;
+      if (clearings.some((c) => Math.hypot(x - c.x, z - c.z) < c.r)) continue;
       const g = island.ground(x, z);
       if (g.coast < 8 || g.water !== -Infinity || g.height < 1.5) continue;
       const kind = choose(g.biome, g.height, hash2(gx, gz, 3));

@@ -8,3 +8,4 @@
 - [0007](0007-combat.md) Combat (Version 2)
 - [0008](0008-materials-and-building.md) Materials and building (Version 3)
 - [0009](0009-skinned-dragons-procedural-animation.md) Skinned dragons with procedural animation
+- [0010](0010-quests-caves-dungeons-castles.md) Quests, Caves, Dungeons and Monster Castles (Version 4)

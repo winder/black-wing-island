@@ -18,6 +18,7 @@ import { InventoryHud } from './ui/inventoryHud';
 import { WorldMap } from './ui/map';
 import { Biome } from './world/biomes';
 import { Island } from './world/island';
+import { Places } from './places/places';
 import { SheepFlocks } from './world/sheep';
 import { Sky } from './world/sky';
 import { Terrain } from './world/terrain';
@@ -63,6 +64,8 @@ const fire = new FireBreath(island);
 const claws = new ClawSwipe(camera);
 const projectiles = new Projectiles(island);
 const dens = new Dens(island);
+const places = new Places(island, dens.dens.map((d) => d.at));
+terrain.clearings.push(...places.list.map((p) => ({ x: p.x, z: p.z, r: p.radius + 25 })));
 const inventory = new Inventory();
 const gathering = new Gathering(terrain, inventory, (harvested, tree) => {
   if (harvested) sound.hit();
@@ -70,10 +73,11 @@ const gathering = new Gathering(terrain, inventory, (harvested, tree) => {
   else sound.hit();
 });
 const buildings = new Buildings(island, village, () => sound.whump(0.25));
+buildings.addSolid(places);
 /** Where you wake up if knocked out: the last village you were in. */
 let lastVillage = { x: island.home.x, z: island.home.z };
 scene.add(sky.group, terrain.group, village.group, sheep.group, fire.object, fire.light, projectiles.group, dens.group,
-  gathering.group, buildings.group);
+  gathering.group, buildings.group, places.group);
 
 // What monsters can do to the world.
 const world: World = {
@@ -124,6 +128,7 @@ const pauseEl = document.querySelector<HTMLDivElement>('#pause')!;
 const placeEl = document.querySelector<HTMLDivElement>('#place')!;
 const underwaterEl = document.querySelector<HTMLDivElement>('#underwater')!;
 const worldMap = new WorldMap(island, hudEl);
+worldMap.markers = places.list.map((p) => ({ x: p.x, z: p.z, kind: p.kind }));
 const combatHud = new CombatHud(hudEl);
 const inventoryHud = new InventoryHud(hudEl);
 inventory.onGain = (m, n) => inventoryHud.gained(m, n);
@@ -270,7 +275,7 @@ if (params.has('debug')) {
   }
   input.forceLocked = params.has('mouse');
   if (params.has('rich')) inventory.state = { wood: 999, stone: 999, gold: 999 };
-  (window as unknown as { game: unknown }).game = { island, player, terrain, sky, worldMap, renderer, dens, fire, claws, input, inventory, buildings, buildMode, gathering };
+  (window as unknown as { game: unknown }).game = { places, island, player, terrain, sky, worldMap, renderer, dens, fire, claws, input, inventory, buildings, buildMode, gathering };
 } else {
   showTitle();
 }

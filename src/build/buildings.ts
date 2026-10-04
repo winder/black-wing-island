@@ -59,8 +59,12 @@ export class Buildings {
   readonly group = new THREE.Group();
   private list: Built[] = [];
   private bolts: Bolt[] = [];
+  /** Other solid things on the Island that buildings mustn't overlap (Monster Castles, Dungeons). */
+  private others: { colliders: Collider[]; obstacles: { x: number; z: number; r: number }[] }[] = [];
 
   constructor(private island: Island, private village: Village, private onPiece: () => void) {}
+
+  addSolid(source: { colliders: Collider[]; obstacles: { x: number; z: number; r: number }[] }) { this.others.push(source); }
 
   get placed(): PlacedBuilding[] {
     return this.list.map(({ kind, seed, x, z, rot }) => ({ kind, seed, x, z, rot }));
@@ -93,7 +97,7 @@ export class Buildings {
       const gap = both ? 4 : (bp.footprint + other) * 0.85;
       if (Math.hypot(b.x - x, b.z - z) < gap) return 'Something is already here';
     }
-    for (const o of this.village.obstacles) {
+    for (const o of [...this.village.obstacles, ...this.others.flatMap((s) => s.obstacles)]) {
       if (Math.hypot(o.x - x, o.z - z) < o.r + bp.footprint * 0.8) return 'Something is already here';
     }
     return null;
@@ -224,5 +228,8 @@ export class Buildings {
       yield* b.colliders;
     }
     yield* this.village.colliders;
+    for (const s of this.others) for (const c of s.colliders) {
+      if (Math.abs(c.x - pos.x) < 150 && Math.abs(c.z - pos.z) < 150) yield c;
+    }
   }
 }
