@@ -45,6 +45,44 @@ function mat(color: string, emissive?: string) {
   }
   return mats.get(key)!;
 }
+/**
+ * Stone laid in staggered blocks with mortar between, drawn in the shader from
+ * world position (so it needs no UVs and stays the same size on every wall and
+ * tower facet). Fades to plain stone in the distance, where it would shimmer.
+ */
+function brick(color: string) {
+  const key = 'brick' + color;
+  if (!mats.has(key)) {
+    const m = new THREE.MeshLambertMaterial({ color, flatShading: true });
+    m.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vBrick;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBrick = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vBrick;')
+        .replace('#include <color_fragment>', `#include <color_fragment>
+          {
+            // The facet's direction from view space, which stays precise far from the world's middle.
+            vec3 wn = normalize((vec4(cross(dFdx(vViewPosition), dFdy(vViewPosition)), 0.0) * viewMatrix).xyz);
+            vec2 size = vec2(2.2, 1.0);
+            vec2 p = abs(wn.y) > 0.7 ? vBrick.xz : vec2(dot(vBrick.xz, normalize(vec2(-wn.z, wn.x) + 1e-5)), vBrick.y);
+            p /= size;
+            p.x += mod(floor(p.y), 2.0) * 0.5;
+            vec2 cell = floor(p), f = fract(p);
+            float shade = 0.86 + 0.2 * fract(sin(dot(cell, vec2(127.1, 311.7))) * 43758.5453);
+            vec2 edge = min(f, 1.0 - f) * size; // metres to the nearest joint
+            vec2 w = fwidth(p) * size;
+            float mortar = 1.0 - smoothstep(0.07, 0.07 + max(w.x, w.y), min(edge.x, edge.y));
+            float near = 1.0 - smoothstep(0.15, 0.4, max(fwidth(p.x), fwidth(p.y)));
+            diffuseColor.rgb *= mix(1.0, shade * mix(1.0, 0.6, mortar), near);
+          }`);
+    };
+    m.customProgramCacheKey = () => 'brick';
+    mats.set(key, m);
+  }
+  return mats.get(key)!;
+}
+
 const STONE = ['#9a958c', '#8e8a83', '#a39d92'];
 const ROOFS = ['#8a3b22', '#3b5a8a', '#4f7a3a', '#7a3b6a', '#6b4a2f'];
 const PLASTER = ['#d8c49c', '#e3d3b0', '#c9a77c', '#d9b98f'];
@@ -190,7 +228,7 @@ export interface CastleLook { stone: string; roof: string; banner: string; /** L
 function castle(r: () => number, look?: CastleLook): Builder {
   const b = new Builder();
   const pick = <T,>(a: T[]) => a[Math.floor(r() * a.length)];
-  const stone = mat(look?.stone ?? pick(STONE)), roof = mat(look?.roof ?? pick(ROOFS)), dark = mat(DARK);
+  const stone = brick(look?.stone ?? pick(STONE)), roof = mat(look?.roof ?? pick(ROOFS)), dark = mat(DARK);
   const half = 36 + r() * 8, wallH = 16 + r() * 3, towerH = wallH + 12 + r() * 6;
   const banner = look?.banner ?? pick(BANNERS);
   const corners = [[-half, -half], [half, -half], [half, half], [-half, half]];
@@ -210,7 +248,7 @@ function castle(r: () => number, look?: CastleLook): Builder {
   const roofed = r() < 0.5;
   for (const [x, z] of corners) {
     const top = b.tower(x, z, 8, towerH, stone, roofed ? roof : undefined);
-    b.flag(x, roofed ? top + 18 : top, z, banner);
+    b.flag(x, roofed ? top + 8 * 2.2 : top, z, banner); // on the roof tip
   }
   const kw = 24 + r() * 6, kh = 30 + r() * 10;
   for (let i = 0; i < 4; i++) b.add(new THREE.BoxGeometry(kw, kh / 4, kw), stone, 0, kh / 8 + (i * kh) / 4, half * 0.25);
@@ -220,9 +258,11 @@ function castle(r: () => number, look?: CastleLook): Builder {
     b.add(new THREE.BoxGeometry(6.5, 10.5, 0.6), dark, 0, 5.25, half * 0.25 - kw / 2 - 0.1);
     b.parts.push(...new Gate(6.5, 10.5).parts(new THREE.Matrix4().makeTranslation(0, 0, half * 0.25 - kw / 2 - 0.7)));
   }
-  if (r() < 0.6) b.add(new THREE.ConeGeometry(kw * 0.75, 16, 4), roof, 0, kh + 8, half * 0.25, Math.PI / 4);
+  // The flag stands on the keep's roof peak, or among its battlements.
+  const keepRoofed = r() < 0.6;
+  if (keepRoofed) b.add(new THREE.ConeGeometry(kw * 0.75, 16, 4), roof, 0, kh + 8, half * 0.25, Math.PI / 4);
   else b.merlons(0, half * 0.25, kw * 0.6, kh, 14, stone);
-  b.flag(0, kh + (r() < 0.6 ? 16 : 2), half * 0.25, banner);
+  b.flag(0, kh + (keepRoofed ? 16 : 0), half * 0.25, banner);
   b.colliders.push(box(0, half * 0.25, kw / 2, kw / 2, kh + 4));
   return b;
 }
