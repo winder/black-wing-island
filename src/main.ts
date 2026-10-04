@@ -19,6 +19,8 @@ import { WorldMap } from './ui/map';
 import { Biome } from './world/biomes';
 import { Island } from './world/island';
 import { Places } from './places/places';
+import { Interiors } from './places/interiors';
+import { pushDragonOut } from './world/collide';
 import { SheepFlocks } from './world/sheep';
 import { Sky } from './world/sky';
 import { Terrain } from './world/terrain';
@@ -127,6 +129,16 @@ const hudEl = document.querySelector<HTMLDivElement>('#hud')!;
 const pauseEl = document.querySelector<HTMLDivElement>('#pause')!;
 const placeEl = document.querySelector<HTMLDivElement>('#place')!;
 const underwaterEl = document.querySelector<HTMLDivElement>('#underwater')!;
+// Going in and out of Interiors hides or shows the whole outside world.
+const outside = [terrain.group, village.group, sheep.group, dens.group, gathering.group, buildings.group, places.group, ocean, projectiles.group];
+const interiors = new Interiors(scene, ui, (inside) => {
+  for (const o of outside) o.visible = !inside;
+  sky.indoors = inside;
+  if (inside) {
+    const where = interiors.current!.place;
+    showPlace(where.name.replace(/^the /, 'The '));
+  } else currentBiome = null;
+});
 const worldMap = new WorldMap(island, hudEl);
 worldMap.markers = places.list.map((p) => ({ x: p.x, z: p.z, kind: p.kind }));
 const combatHud = new CombatHud(hudEl);
@@ -154,7 +166,9 @@ function save() {
     savedAt: Date.now(),
     playSeconds,
     timeOfDay: sky.time,
-    player: player.state,
+    player: interiors.outsidePos
+      ? { ...player.state, x: interiors.outsidePos.pos.x, y: island.heightAt(interiors.outsidePos.pos.x, interiors.outsidePos.pos.z), z: interiors.outsidePos.pos.z, yaw: interiors.outsidePos.yaw, mode: 'walk' }
+      : player.state,
     explored: packBits(worldMap.explored),
     exploredFraction: worldMap.exploredFraction,
     inventory: inventory.state,
@@ -275,7 +289,7 @@ if (params.has('debug')) {
   }
   input.forceLocked = params.has('mouse');
   if (params.has('rich')) inventory.state = { wood: 999, stone: 999, gold: 999 };
-  (window as unknown as { game: unknown }).game = { places, island, player, terrain, sky, worldMap, renderer, dens, fire, claws, input, inventory, buildings, buildMode, gathering };
+  (window as unknown as { game: unknown }).game = { places, interiors, island, player, terrain, sky, worldMap, renderer, dens, fire, claws, input, inventory, buildings, buildMode, gathering };
 } else {
   showTitle();
 }
@@ -301,7 +315,7 @@ function updateCombat(dt: number) {
   fire.update(dt, wantFire, player, targets);
   sound.fire(fire.breathing);
   claws.update(dt, input, player, [...targets, ...gathering.targetsNear(player.position)], () => sound.swish(), !building || input.wasPressed('KeyF'));
-  dens.update(dt, world);
+  if (!interiors.current) dens.update(dt, world);
   buildings.update(dt, dens.active);
   projectiles.update(dt, player.center(), 4, (hit) => {
     world.hurtPlayer(hit.damage, hit.position, 14);
@@ -318,7 +332,9 @@ function updateCombat(dt: number) {
     combatHud.knockedOut(knockedOutFor < 2.5 ? 0 : 1);
     if (knockedOutFor > 4.5) {
       const home = lastVillage.x === island.home.x && lastVillage.z === island.home.z;
-      player.placeAt(lastVillage.x, lastVillage.z + (home ? 40 : 48), 0.6);
+      const wake = new THREE.Vector3(lastVillage.x, 0, lastVillage.z + (home ? 40 : 48));
+      if (interiors.current) interiors.leave(player, { pos: wake, yaw: 0.6 });
+      else player.placeAt(wake.x, wake.z, 0.6);
       v.revive();
       knockedOutFor = -1;
       combatHud.knockedOut(null);
@@ -327,46 +343,67 @@ function updateCombat(dt: number) {
   combatHud.update(v, currentFoe());
 }
 
+/** Show a place's name across the screen for a moment. */
+function showPlace(name: string) {
+  placeEl.textContent = name;
+  placeEl.classList.remove('show');
+  void placeEl.offsetWidth;
+  placeEl.classList.add('show');
+}
+
 // ---------- the loop ----------
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.1);
   const paused = playing && !input.locked && !params.has('debug');
   if (playing && !paused) {
-    if (input.wasPressed('KeyM')) worldMap.toggle();
+    const inside = interiors.current;
+    if (input.wasPressed('KeyM') && !inside) worldMap.toggle();
     const wasSwimming = player.mode === 'swim';
-    buildMode.update(input, camera, player.position);
-    player.update(dt, input);
-    buildings.pushOut(player.position, player.yaw);
-    gathering.update(dt);
-    const inVillage = buildings.villageAt(player.position.x, player.position.z);
-    if (inVillage) lastVillage = { x: inVillage.x, z: inVillage.z };
+    if (!inside) buildMode.update(input, camera, player.position);
+    if (!interiors.busy) player.update(dt, input);
+    if (inside) pushDragonOut(player.position, player.yaw, inside.interior.colliders);
+    else buildings.pushOut(player.position, player.yaw);
+    // Walk into a Portal to go in; back to the doorway to come out.
+    if (!interiors.busy && !player.vitals.knockedOut) {
+      if (inside) {
+        if (player.position.distanceTo(inside.interior.exit) < 7) interiors.leave(player);
+      } else {
+        const door = places.portalNear(player.position);
+        if (door) interiors.enter(door, player);
+      }
+    }
+    interiors.update(dt, player.position);
+    if (!inside) {
+      gathering.update(dt);
+      const inVillage = buildings.villageAt(player.position.x, player.position.z);
+      if (inVillage) lastVillage = { x: inVillage.x, z: inVillage.z };
+    }
     inventoryHud.update(inventory);
     if (player.mode === 'swim' && !wasSwimming) sound.splash();
     updateCombat(dt);
     playSeconds += dt;
     sinceSave += dt;
     if (sinceSave > AUTOSAVE_SECONDS) save();
-
-    const p = player.position;
-    const g = island.ground(p.x, p.z);
-    worldMap.reveal(p.x, p.z, p.y - g.height);
-    worldMap.draw(p.x, p.z, player.yaw);
     sound.update(player.velocity.length(), player.flap, player.mode === 'fly', player.underwater);
 
-    // Say which biome you've entered, once you've been there a moment.
-    const b = g.coast > 0 ? g.biome : Biome.Ocean;
-    if (b !== currentBiome) {
-      biomeTimer += dt;
-      if (biomeTimer > 1.2) {
-        currentBiome = b;
-        biomeTimer = 0;
-        placeEl.textContent = BIOME_NAMES[b];
-        placeEl.classList.remove('show');
-        void placeEl.offsetWidth;
-        placeEl.classList.add('show');
-      }
-    } else biomeTimer = 0;
+    if (!inside) {
+      const p = player.position;
+      const g = island.ground(p.x, p.z);
+      worldMap.reveal(p.x, p.z, p.y - g.height);
+      worldMap.draw(p.x, p.z, player.yaw);
+
+      // Say which biome you've entered, once you've been there a moment.
+      const b = g.coast > 0 ? g.biome : Biome.Ocean;
+      if (b !== currentBiome) {
+        biomeTimer += dt;
+        if (biomeTimer > 1.2) {
+          currentBiome = b;
+          biomeTimer = 0;
+          showPlace(BIOME_NAMES[b]);
+        }
+      } else biomeTimer = 0;
+    }
   } else if (!playing) {
     // Title screen: drift slowly over the Island.
     const t = performance.now() / 1000;
@@ -386,8 +423,9 @@ renderer.setAnimationLoop(() => {
   // Under a lake, everything turns blue and murky.
   const camGround = island.ground(camera.position.x, camera.position.z);
   const fog = scene.fog as THREE.Fog;
-  const underwater = camera.position.y < camGround.water || (camGround.height < 0 && camera.position.y < 0);
-  if (underwater) { fog.color.set('#1d5a7a'); fog.near = 2; fog.far = 70; }
+  const underwater = !interiors.current && (camera.position.y < camGround.water || (camGround.height < 0 && camera.position.y < 0));
+  if (interiors.current) { fog.near = 30; fog.far = 260; }
+  else if (underwater) { fog.color.set('#1d5a7a'); fog.near = 2; fog.far = 70; }
   else {
     // See further when flying high, so the whole dragon shape can be seen from the sky.
     const altitude = Math.max(0, camera.position.y - Math.max(0, camGround.height));

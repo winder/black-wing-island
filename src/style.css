@@ -86,3 +86,5 @@ button.small { font-size: 14px; padding: 6px 12px; margin-left: 6px; background:
 .build-menu p { margin: 8px 0 0; font-size: 13px; opacity: 0.8; }
 .build-menu p.good { color: #8dff9a; font-size: 16px; opacity: 1; }
 .build-menu p.bad { color: #ff8a80; font-size: 16px; opacity: 1; }
+
+.fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity 0.4s; z-index: 50; }

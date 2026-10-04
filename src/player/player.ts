@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { Vitals } from '../combat/vitals';
 import { Input } from '../input';
 import { Island } from '../world/island';
+import type { Indoors } from '../places/interior';
 import { makeDragon, DragonModel } from './dragonModel';
 
 export type Mode = 'walk' | 'fly' | 'swim';
@@ -40,6 +41,8 @@ export class Player {
   /** While something (a Kraken tentacle) holds the dragon, it is dragged to this point and can't move. */
   heldAt: THREE.Vector3 | null = null;
   private fpWings: DragonModel;
+  /** Set while inside an Interior: its floor, ceiling and walls replace the Island's. */
+  indoors: Indoors | null = null;
 
   constructor(private island: Island, private camera: THREE.PerspectiveCamera, scene: THREE.Scene) {
     this.model = makeDragon();
@@ -76,6 +79,18 @@ export class Player {
     this.velocity.set(0, 0, 0);
   }
 
+  /** Go into (or, with null, out of) an Interior, standing at `at`. */
+  enterIndoors(indoors: Indoors | null, at: THREE.Vector3, yaw: number) {
+    this.indoors = indoors;
+    this.position.copy(at);
+    this.position.y = indoors ? indoors.floorAt(at.x, at.z) : this.island.heightAt(at.x, at.z);
+    this.yaw = yaw;
+    this.pitch = 0;
+    this.mode = 'walk';
+    this.underwater = false;
+    this.velocity.set(0, 0, 0);
+  }
+
   /** Where fire comes out: the front of the dragon's head. */
   mouth(out = new THREE.Vector3()) {
     const ahead = this.thirdPerson ? 5.5 : 5;
@@ -102,6 +117,7 @@ export class Player {
   }
 
   private surfaceAt(x: number, z: number) {
+    if (this.indoors) return { ground: this.indoors.floorAt(x, z), water: -Infinity, inland: false, coast: Infinity };
     const g = this.island.ground(x, z);
     const ocean = g.height < 0 ? 0 : -Infinity;
     return { ground: g.height, water: Math.max(g.water, ocean), inland: g.water !== -Infinity, coast: g.coast };
@@ -200,6 +216,11 @@ export class Player {
       if (here.water - here.ground < SWIM_DEPTH - 0.5) { this.mode = 'walk'; this.underwater = false; }
     }
     if (this.mode !== 'swim') this.underwater = false;
+    // Indoors, the roof stops you flying up through it.
+    if (this.indoors) {
+      const roof = this.indoors.ceilingAt(p.x, p.z) - 6;
+      if (p.y > roof) { p.y = roof; v.y = Math.min(0, v.y); }
+    }
 
     // Out at sea, the wind pushes the dragon back towards the Island.
     if (here.coast < -WIND_START) {
@@ -245,8 +266,11 @@ export class Player {
       const back = this.lookDir().multiplyScalar(-22);
       const pos = eye.clone().add(back);
       pos.y += 5;
-      const g = this.island.heightAt(pos.x, pos.z);
-      if (pos.y < g + 2) pos.y = g + 2;
+      if (this.indoors) this.indoors.limitCamera(eye, pos);
+      else {
+        const g = this.island.heightAt(pos.x, pos.z);
+        if (pos.y < g + 2) pos.y = g + 2;
+      }
       cam.position.copy(pos);
       cam.lookAt(eye);
     }

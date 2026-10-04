@@ -13,6 +13,8 @@ export class Sky {
   readonly sun = new THREE.DirectionalLight('#fff4e0', 2.2);
   readonly moon = new THREE.DirectionalLight('#8fa6d8', 0.35);
   readonly ambient = new THREE.HemisphereLight('#bcd8ff', '#5a5040', 1.0);
+  /** Inside an Interior: no sky, no sun, just a little dim light. */
+  indoors = false;
   /** 0 = midnight, 0.25 = sunrise, 0.5 = noon, 0.75 = sunset. */
   time = 0.3;
   readonly horizon = new THREE.Color();
@@ -90,5 +92,11 @@ export class Sky {
     this.moonDisc.lookAt(center);
 
     if (scene.fog) (scene.fog as THREE.Fog).color.copy(this.horizon);
+    for (const o of [this.dome, this.stars, this.sunDisc, this.moonDisc]) o.visible = !this.indoors;
+    if (this.indoors) {
+      this.sun.intensity = this.moon.intensity = 0;
+      this.ambient.intensity = 0.22;
+      if (scene.fog) (scene.fog as THREE.Fog).color.set('#0b0807');
+    }
   }
 }
