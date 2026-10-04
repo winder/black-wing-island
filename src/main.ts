@@ -332,7 +332,7 @@ renderer.setAnimationLoop(() => {
     const wasSwimming = player.mode === 'swim';
     buildMode.update(input, camera, player.position);
     player.update(dt, input);
-    buildings.pushOut(player.position);
+    buildings.pushOut(player.position, player.yaw);
     gathering.update(dt);
     const inVillage = buildings.villageAt(player.position.x, player.position.z);
     if (inVillage) lastVillage = { x: inVillage.x, z: inVillage.z };

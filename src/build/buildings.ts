@@ -5,8 +5,9 @@
 import * as THREE from 'three';
 import { Monster } from '../monsters/monster';
 import { Island, VILLAGE_RADIUS } from '../world/island';
+import { Collider, pushDragonOut } from '../world/collide';
 import { Village } from '../world/village';
-import { Blueprint, Collider, blueprint, plinth } from './blueprints';
+import { Blueprint, blueprint, plinth } from './blueprints';
 import { BuildingKind } from './inventory';
 
 export const CONSTRUCT_SECONDS = 15;
@@ -122,7 +123,7 @@ export class Buildings {
     const toWorld = (v: THREE.Vector3) => v.applyMatrix4(rot).add(new THREE.Vector3(p.x, baseY, p.z));
     const colliders = bp.colliders.map((c) => {
       const w = toWorld(new THREE.Vector3(c.x, 0, c.z));
-      return { x: w.x, z: w.z, r: c.r, height: baseY + c.height };
+      return { ...c, x: w.x, z: w.z, rot: (c.rot ?? 0) + p.rot, height: baseY + c.height };
     });
     const turrets = bp.turrets.map((t) => toWorld(t.clone()));
     const b: Built = { ...p, group, meshes, baseY, t: instant ? CONSTRUCT_SECONDS : 0, colliders, turrets, reload: 0 };
@@ -211,16 +212,17 @@ export class Buildings {
     }
   }
 
-  /** Keep the dragon out of walls, towers and houses (it can still fly over them). */
-  pushOut(pos: THREE.Vector3) {
+  /** Keep the dragon (body and head) out of buildings and the Home Village huts. It can still fly over them. */
+  pushOut(pos: THREE.Vector3, yaw: number) {
+    pushDragonOut(pos, yaw, this.solid(pos));
+  }
+
+  /** Colliders near `pos`: finished buildings and the Home Village. */
+  private *solid(pos: THREE.Vector3): Generator<Collider> {
     for (const b of this.list) {
-      if (b.t < 1) continue;
-      for (const c of b.colliders) {
-        if (pos.y > c.height) continue;
-        const dx = pos.x - c.x, dz = pos.z - c.z;
-        const d = Math.hypot(dx, dz), r = c.r + 2.5;
-        if (d < r && d > 0.001) { pos.x = c.x + (dx / d) * r; pos.z = c.z + (dz / d) * r; }
-      }
+      if (b.t < 1 || Math.abs(b.x - pos.x) > 120 || Math.abs(b.z - pos.z) > 120) continue;
+      yield* b.colliders;
     }
+    yield* this.village.colliders;
   }
 }

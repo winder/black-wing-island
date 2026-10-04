@@ -6,12 +6,11 @@
 // and have their floor at y = 0.
 
 import * as THREE from 'three';
+import { box, Collider } from '../world/collide';
 import { BuildingKind } from './inventory';
 
 export interface Part { geometry: THREE.BufferGeometry; material: THREE.Material; matrix: THREE.Matrix4 }
 
-/** A circle on the ground the dragon can't walk through, up to `height`. */
-export interface Collider { x: number; z: number; r: number; height: number }
 
 export interface Blueprint {
   kind: BuildingKind;
@@ -85,12 +84,7 @@ class Builder {
         this.add(new THREE.BoxGeometry(len / n, 2.2, thick * 1.05), stone, x0 + (x1 - x0) * t, height + 1.1, z0 + (z1 - z0) * t, ang);
       }
     }
-    // Colliders: circles along the wall.
-    const steps = Math.max(1, Math.ceil(len / thick));
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      this.colliders.push({ x: x0 + (x1 - x0) * t, z: z0 + (z1 - z0) * t, r: thick * 0.75, height: height + 2 });
-    }
+    this.colliders.push(box((x0 + x1) / 2, (z0 + z1) / 2, len / 2, thick / 2, height + 2, ang));
   }
   /** A round stone tower. Returns the height of its top. */
   tower(x: number, z: number, r: number, height: number, stone: THREE.Material, roof?: THREE.Material) {
@@ -127,7 +121,7 @@ function house(r: () => number): Builder {
   b.add(new THREE.BoxGeometry(5, 7, 1), dark, 0, 3.5, front - 0.3);
   for (const s of [-1, 1]) if (r() < 0.8) b.add(new THREE.BoxGeometry(2.4, 2.4, 1), dark, s * w * 0.3, h * 0.62, front - 0.2);
   if (r() < 0.5) b.add(new THREE.BoxGeometry(2, 6, 2), mat(pick(STONE)), w * 0.25, h + 6, w * 0.1);
-  b.colliders.push({ x: 0, z: 0, r: w / 2 + 0.5, height: h + 8 });
+  b.colliders.push(round ? { x: 0, z: 0, r: w / 2 + 0.6, height: h + 8 } : box(0, 0, w / 2, w * 0.425, h + 8));
   return b;
 }
 
@@ -141,6 +135,7 @@ function villageCenter(r: () => number): Builder {
   for (let i = 0; i < stones; i++) {
     const a = (i / stones) * Math.PI * 2;
     b.add(new THREE.BoxGeometry(2.5, 7 + r() * 3, 2), stone, Math.cos(a) * (R + 12), 4, Math.sin(a) * (R + 12), -a);
+    b.colliders.push({ x: Math.cos(a) * (R + 12), z: Math.sin(a) * (R + 12), r: 1.5, height: 10 });
   }
   b.add(new THREE.CylinderGeometry(R, R + 1, h, 8), wall, 0, h / 2, 0);
   for (let i = 0; i < 8; i++) {
@@ -160,7 +155,10 @@ function wallPiece(r: () => number): Builder {
   const stone = mat(STONE[Math.floor(r() * STONE.length)]);
   const len = 34, h = 10 + r() * 2;
   b.wall(-len / 2, 0, len / 2, 0, h, 4, stone);
-  for (const s of [-1, 1]) b.add(new THREE.BoxGeometry(5.5, h + 3, 5.5), stone, s * len / 2, (h + 3) / 2, 0);
+  for (const s of [-1, 1]) {
+    b.add(new THREE.BoxGeometry(5.5, h + 3, 5.5), stone, s * len / 2, (h + 3) / 2, 0);
+    b.colliders.push(box(s * len / 2, 0, 2.75, 2.75, h + 5));
+  }
   return b;
 }
 
@@ -204,7 +202,7 @@ function castle(r: () => number): Builder {
   if (r() < 0.6) b.add(new THREE.ConeGeometry(kw * 0.75, 16, 4), roof, 0, kh + 8, half * 0.25, Math.PI / 4);
   else b.merlons(0, half * 0.25, kw * 0.6, kh, 14, stone);
   b.flag(0, kh + (r() < 0.6 ? 16 : 2), half * 0.25, banner);
-  b.colliders.push({ x: 0, z: half * 0.25, r: kw * 0.6, height: kh + 4 });
+  b.colliders.push(box(0, half * 0.25, kw / 2, kw / 2, kh + 4));
   return b;
 }
 

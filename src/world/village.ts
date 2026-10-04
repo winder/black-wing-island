@@ -3,6 +3,7 @@
 
 import * as THREE from 'three';
 import { makeDragon, DragonModel } from '../player/dragonModel';
+import { Collider } from './collide';
 import { Island, VILLAGE_RADIUS } from './island';
 import { hash2 } from './noise';
 
@@ -20,6 +21,8 @@ export class Village {
   private villagers: Villager[] = [];
   /** Things already standing in the Home Village (huts, the bonfire), so nothing gets built on top. */
   readonly obstacles: { x: number; z: number; r: number }[] = [];
+  /** What the dragon bumps into: the huts' walls and the bonfire's ring of stones. */
+  readonly colliders: Collider[] = [];
   private fire: THREE.PointLight;
   private flames: THREE.Mesh;
   private t = 0;
@@ -50,6 +53,7 @@ export class Village {
       hut.add(door);
       hut.position.set(x, y - 0.5, z);
       this.obstacles.push({ x, z, r: 13 * size });
+      this.colliders.push({ x, z, r: 10 * size, height: y + 19 * size });
       hut.scale.setScalar(size);
       hut.lookAt(cx, y, cz);
       hut.rotateY(Math.PI);
@@ -59,6 +63,7 @@ export class Village {
     // Bonfire in a ring of stones.
     const y0 = island.heightAt(cx, cz);
     this.obstacles.push({ x: cx, z: cz, r: 12 });
+    this.colliders.push({ x: cx, z: cz, r: 7.4, height: y0 + 7 });
     for (let i = 0; i < 10; i++) {
       const a = (i / 10) * Math.PI * 2;
       const s = new THREE.Mesh(new THREE.DodecahedronGeometry(1.4, 0), stone);
