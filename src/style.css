@@ -115,3 +115,9 @@ button.small { font-size: 14px; padding: 6px 12px; margin-left: 6px; background:
 .treasures .row.worn b { color: #8dff9a; }
 .treasures kbd { display: inline-block; width: 22px; text-align: center; border-radius: 5px; background: var(--accent); font-family: inherit; }
 .treasures p { font-size: 14px; opacity: 0.8; margin: 8px 0 0; }
+
+/* ---------- dev teleport panel ---------- */
+.dev-panel { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(900px, 94vw); max-height: 88vh; overflow: auto; padding: 14px 18px; border-radius: 12px; background: rgba(20, 12, 24, 0.94); pointer-events: auto; z-index: 40; font-family: system-ui, sans-serif; }
+.dev-panel h3 { margin: 0 0 8px; } .dev-panel small { opacity: 0.6; font-weight: normal; }
+.dev-panel .group { margin: 6px 0; } .dev-panel .group b { display: block; margin-bottom: 4px; color: #ffd84a; }
+.dev-panel button { font-size: 13px; padding: 5px 9px; margin: 0 6px 6px 0; background: #3a2a4a; }

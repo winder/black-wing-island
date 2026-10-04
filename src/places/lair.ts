@@ -59,7 +59,9 @@ export class Lair {
     const prize = centre.clone().addScaledVector(away, reach);
 
     if (!state.beaten) {
-      const boss = spawnBoss(place.boss, centre.clone().addScaledVector(away, -10));
+      // Small enough to fit under the roof, with room to fly over it.
+      const roof = interior.ceilingAt(centre.x, centre.z) - ORIGIN.y;
+      const boss = spawnBoss(place.boss, centre.clone().addScaledVector(away, -10), roof * 0.55);
       this.monsters.push(boss);
       this.group.add(boss.group);
     }

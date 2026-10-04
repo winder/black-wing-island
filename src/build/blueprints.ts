@@ -7,6 +7,7 @@
 
 import * as THREE from 'three';
 import { box, Collider } from '../world/collide';
+import { Gate } from './gates';
 import { BuildingKind } from './inventory';
 
 export interface Part { geometry: THREE.BufferGeometry; material: THREE.Material; matrix: THREE.Matrix4 }
@@ -179,7 +180,7 @@ function tower(r: () => number): Builder {
 }
 
 /** Colours for a castle; Monster Castles use their own. */
-export interface CastleLook { stone: string; roof: string; banner: string }
+export interface CastleLook { stone: string; roof: string; banner: string; /** Leave the keep door open for a Portal's gates. */ portal?: boolean }
 
 function castle(r: () => number, look?: CastleLook): Builder {
   const b = new Builder();
@@ -196,6 +197,10 @@ function castle(r: () => number, look?: CastleLook): Builder {
   b.wall(half, half, -half, half, wallH, 5, stone);
   b.wall(-half, half, -half, -half, wallH, 5, stone);
   b.add(new THREE.BoxGeometry(gate * 2 + 4, 6, 6), stone, 0, wallH - 3, -half);
+  // Heavy wooden gates in the gateway, standing open.
+  const wallGate = new Gate(gate * 2 - 1, wallH - 6.2, false);
+  wallGate.setOpen(0.9);
+  b.parts.push(...wallGate.parts(new THREE.Matrix4().makeTranslation(0, 0, -half - 2.6)));
   for (const s of [-1, 1]) b.tower(s * (gate + 2), -half, 4.5, wallH + 6, stone);
   const roofed = r() < 0.5;
   for (const [x, z] of corners) {
@@ -204,8 +209,12 @@ function castle(r: () => number, look?: CastleLook): Builder {
   }
   const kw = 24 + r() * 6, kh = 30 + r() * 10;
   for (let i = 0; i < 4; i++) b.add(new THREE.BoxGeometry(kw, kh / 4, kw), stone, 0, kh / 8 + (i * kh) / 4, half * 0.25);
-  b.add(new THREE.BoxGeometry(6, 10, 1), dark, 0, 5, half * 0.25 - kw / 2 - 0.3);
   b.portal = new THREE.Vector3(0, 0, half * 0.25 - kw / 2 - 0.5);
+  if (!look?.portal) {
+    // Your own castle's keep: a shut wooden door.
+    b.add(new THREE.BoxGeometry(6.5, 10.5, 0.6), dark, 0, 5.25, half * 0.25 - kw / 2 - 0.1);
+    b.parts.push(...new Gate(6.5, 10.5).parts(new THREE.Matrix4().makeTranslation(0, 0, half * 0.25 - kw / 2 - 0.7)));
+  }
   if (r() < 0.6) b.add(new THREE.ConeGeometry(kw * 0.75, 16, 4), roof, 0, kh + 8, half * 0.25, Math.PI / 4);
   else b.merlons(0, half * 0.25, kw * 0.6, kh, 14, stone);
   b.flag(0, kh + (r() < 0.6 ? 16 : 2), half * 0.25, banner);

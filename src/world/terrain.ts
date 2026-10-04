@@ -44,7 +44,7 @@ export class Terrain {
   readonly group = new THREE.Group();
   private chunks = new Map<string, Chunk>();
   /** Tunnels that break through the surface: the ground leaves a hole there. Set before chunks are built. */
-  hole?: { touching(x0: number, z0: number, size: number): boolean; holeAt(x: number, y: number, z: number): boolean };
+  hole?: { touching(x0: number, z0: number, size: number): boolean; carve(x: number, y: number, z: number): THREE.Vector3 | null };
   /** Round spots kept free of trees and rocks. Add them before chunks are built. */
   readonly clearings: { x: number; z: number; r: number }[] = [];
   private land: { cx: number; cz: number }[] = [];
@@ -121,6 +121,36 @@ export class Terrain {
     });
   }
 
+  /**
+   * A square of ground that a tunnel cuts through, re-cut into small pieces:
+   * pieces wholly inside the tunnel are left out, and the corners of the rest
+   * that poke inside are pulled onto the tunnel wall. So the hillside meets
+   * the tunnel's edge closely, with no gaps, and nothing stretches across it.
+   * `hs`, `cols`: the heights and colours at the square's corners (a, b, d, e).
+   * Points follow the square's own two triangles, so its edges match its neighbours'.
+   */
+  private cutAroundTunnel(x: number, z: number, size: number, hs: number[], cols: Float32Array[], pos: number[], col: number[]) {
+    const n = Math.max(4, Math.ceil(size / 0.6));
+    const s = size / n;
+    const pts: { p: THREE.Vector3; inside: boolean; c: number[] }[] = [];
+    for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) {
+      const px = x + i * s, pz = z + j * s;
+      const u = i / n, v = j / n;
+      // Triangles (a, d, b) and (b, d, e), as the square is drawn.
+      const h = u + v <= 1 ? hs[0] + (hs[1] - hs[0]) * u + (hs[2] - hs[0]) * v : hs[3] + (hs[2] - hs[3]) * (1 - u) + (hs[1] - hs[3]) * (1 - v);
+      const p = new THREE.Vector3(px, h, pz);
+      const wall = this.hole!.carve(p.x, p.y, p.z);
+      // Colour blended from the square's corners.
+      const c = [0, 1, 2].map((k) => (cols[0][k] * (1 - u) + cols[1][k] * u) * (1 - v) + (cols[2][k] * (1 - u) + cols[3][k] * u) * v);
+      pts.push({ p: wall ?? p, inside: !!wall, c });
+    }
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const a = pts[j * (n + 1) + i], b = pts[j * (n + 1) + i + 1], d = pts[(j + 1) * (n + 1) + i], e = pts[(j + 1) * (n + 1) + i + 1];
+      if (a.inside && b.inside && d.inside && e.inside) continue;
+      for (const v of [a, d, b, b, d, e]) { pos.push(v.p.x, v.p.y, v.p.z); col.push(v.c[0], v.c[1], v.c[2]); }
+    }
+  }
+
   private build(cx: number, cz: number, n: number): Chunk {
     const island = this.island;
     const step = CHUNK_SIZE / n;
@@ -178,14 +208,24 @@ export class Terrain {
       col.set([col[k * 3], col[k * 3 + 1], col[k * 3 + 2]], s * 3);
     });
 
-    // Cave mouths: leave out any square with a corner inside a tunnel.
+    // Cave mouths: squares wholly inside a tunnel are left out, and squares the
+    // tunnel cuts through are re-cut finely (see `cutAroundTunnel`).
     const holed = this.hole?.touching(x0, z0, CHUNK_SIZE) ? new Uint8Array(verts) : null;
-    if (holed) for (let k = 0; k < verts; k++) holed[k] = this.hole!.holeAt(pos[k * 3], pos[k * 3 + 1], pos[k * 3 + 2]) ? 1 : 0;
+    if (holed) for (let k = 0; k < verts; k++) holed[k] = this.hole!.carve(pos[k * 3], pos[k * 3 + 1], pos[k * 3 + 2]) ? 1 : 0;
+    const cutPos: number[] = [], cutCol: number[] = [];
     const idx: number[] = [];
     for (let j = 0; j < n; j++) {
       for (let i = 0; i < n; i++) {
         const a = j * (n + 1) + i, b = a + 1, d = a + n + 1, e = d + 1;
-        if (holed && (holed[a] || holed[b] || holed[d] || holed[e])) continue;
+        if (holed) {
+          const inside = holed[a] + holed[b] + holed[d] + holed[e];
+          if (inside === 4) continue;
+          if (inside > 0) {
+            const corners = [a, b, d, e];
+            this.cutAroundTunnel(x0 + i * step, z0 + j * step, step, corners.map((k) => pos[k * 3 + 1]), corners.map((k) => col.subarray(k * 3, k * 3 + 3)), cutPos, cutCol);
+            continue;
+          }
+        }
         idx.push(a, d, b, b, d, e);
       }
     }
@@ -205,6 +245,13 @@ export class Terrain {
     const ground = new THREE.Mesh(geo, this.groundMat);
     const group = new THREE.Group();
     group.add(ground);
+    if (cutPos.length) {
+      const cut = new THREE.BufferGeometry();
+      cut.setAttribute('position', new THREE.Float32BufferAttribute(cutPos, 3));
+      cut.setAttribute('color', new THREE.Float32BufferAttribute(cutCol, 3));
+      cut.computeVertexNormals();
+      group.add(new THREE.Mesh(cut, this.groundMat));
+    }
 
     // Inland water: only triangles where all three corners are wet.
     const wpos: number[] = [];

@@ -27,6 +27,7 @@ import { Quest, QuestState, Quests, rewardText } from './quests/quests';
 import { ACCESSORIES, AccessoryId, POWERS, Rewards } from './quests/rewards';
 import { Giver, QuestGivers } from './quests/givers';
 import { Treasures } from './ui/treasures';
+import { DevPanel, Spot } from './ui/devPanel';
 import type { DragonModel } from './player/dragonModel';
 import { pushDragonOut } from './world/collide';
 import { SheepFlocks } from './world/sheep';
@@ -418,9 +419,60 @@ function showTitle() {
     }));
 }
 
+// ---------- developer teleports (?debug or ?dev) ----------
+const devMode = params.has('debug') || params.has('dev');
+
+/** Every place worth jumping to when testing. */
+function spots(): Spot[] {
+  const out: Spot[] = [{ id: 'home', label: 'Home Village', group: 'Villages' }];
+  for (const v of buildings.villages().slice(1)) out.push({ id: `at:${Math.round(v.x)},${Math.round(v.z)}`, label: v.name, group: 'Villages' });
+  for (const p of places.list) {
+    const group = p.kind === 'castle' ? 'Monster Castles' : 'Dungeons';
+    out.push({ id: p.id, label: `${p.name.replace(/^the /, '')}: door`, group });
+    out.push({ id: `${p.id}:boss`, label: `${p.name.replace(/^the /, '')}: boss hall`, group });
+  }
+  for (const c of caves.list) {
+    out.push({ id: c.id, label: `${c.id}: mouth`, group: 'Caves' });
+    out.push({ id: `${c.id}:chamber`, label: `${c.id}: chamber`, group: 'Caves' });
+  }
+  return out;
+}
+
+/** Go straight somewhere, by spot id (see `spots()`), e.g. "castle-4:boss" or "cave-2:chamber". */
+async function teleport(id: string) {
+  const [what, where] = id.split(':');
+  const ground = async (x: number, z: number, yaw: number, y?: number) => {
+    const pos = new THREE.Vector3(x, 0, z);
+    if (interiors.current) await interiors.leave(player, { pos, yaw });
+    else player.enterIndoors(null, pos, yaw);
+    if (y !== undefined) player.position.y = y;
+    terrain.update(x, z, 3000);
+  };
+  const place = places.list.find((p) => p.id === what);
+  const cave = caves.list.find((c) => c.id === what);
+  if (what === 'home') await ground(island.home.x, island.home.z + 40, 0.6);
+  else if (what === 'at') { const [x, z] = where.split(',').map(Number); await ground(x, z + 60, 0); }
+  else if (place && where === 'boss') {
+    if (interiors.current && interiors.current.place !== place) await interiors.leave(player);
+    if (!interiors.current) await interiors.enter(place, player);
+    const view = interiors.current!.interior.hallView();
+    player.position.copy(view.pos);
+    player.yaw = view.yaw;
+  } else if (place) {
+    const out = new THREE.Vector3(-Math.sin(place.rot), 0, -Math.cos(place.rot));
+    await ground(place.portal.x + out.x * 40, place.portal.z + out.z * 40, place.rot + Math.PI);
+  } else if (cave && where === 'chamber') {
+    await ground(cave.chamber.x, cave.chamber.z, 0, cave.chamber.y);
+  } else if (cave) {
+    const dx = cave.axis[10].x - cave.axis[0].x, dz = cave.axis[10].z - cave.axis[0].z, d = Math.hypot(dx, dz);
+    await ground(cave.mouth.x - (dx / d) * 30, cave.mouth.z - (dz / d) * 30, Math.atan2(dx / d, dz / d) + Math.PI);
+  } else console.warn(`No such place: ${id}`);
+}
+const devPanel = new DevPanel(ui, input, spots, (id) => { void teleport(id); });
+
 // Pausing: losing the mouse (Esc) pauses the game.
 document.addEventListener('pointerlockchange', () => {
-  if (!playing) return;
+  if (!playing || devPanel.open) return;
   pauseEl.classList.toggle('hidden', input.locked);
 });
 canvas.addEventListener('click', () => { if (playing) input.lock(); });
@@ -452,7 +504,8 @@ if (params.has('debug')) {
   }
   input.forceLocked = params.has('mouse');
   if (params.has('rich')) inventory.state = { wood: 999, stone: 999, gold: 999 };
-  (window as unknown as { game: unknown }).game = { treasures, quests, rewards, givers, places, caves, interiors, island, player, terrain, sky, worldMap, renderer, dens, fire, claws, input, inventory, buildings, buildMode, gathering };
+  if (params.has('goto')) void teleport(params.get('goto')!);
+  (window as unknown as { game: unknown }).game = { goto: teleport, spots, treasures, quests, rewards, givers, places, caves, interiors, island, player, terrain, sky, worldMap, renderer, dens, fire, claws, input, inventory, buildings, buildMode, gathering };
 } else {
   showTitle();
 }
@@ -527,11 +580,12 @@ function showPlace(name: string) {
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.1);
-  const paused = playing && !input.locked && !params.has('debug');
+  const paused = playing && !input.locked && !params.has('debug') && !devPanel.open;
   if (playing && !paused) {
     const inside = interiors.current;
     if (input.wasPressed('KeyM') && !inside) worldMap.toggle();
     if (input.wasPressed('KeyI')) treasures.toggle();
+    if (devMode && input.wasPressed('Backquote')) devPanel.toggle();
     treasures.update(input);
     const wasSwimming = player.mode === 'swim';
     if (!inside) buildMode.update(input, camera, player.position);
@@ -552,6 +606,7 @@ renderer.setAnimationLoop(() => {
     }
     interiors.update(dt, player.position);
     if (!inside) {
+      places.update(dt, player.position);
       placeBoards();
       const inCave = caves.at(player.position);
       if (inCave && inCave.depth > 0.3) quests.visited(inCave.cave.id);

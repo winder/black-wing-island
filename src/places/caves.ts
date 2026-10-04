@@ -151,6 +151,35 @@ export class Caves {
         for (const v of [a, c, b, a, d, c]) { pos.push(v.x, v.y, v.z); col.push(shade.r, shade.g, shade.b); }
       }
     }
+    // Close off the far end of the tunnel.
+    const endRing = rings[rings.length - 1], end = cave.axis[cave.axis.length - 1];
+    const endShade = rock.clone().multiplyScalar(0.8);
+    for (let j = 0; j < SIDES; j++) {
+      const a = endRing[j], b = endRing[(j + 1) % SIDES];
+      for (const v of [end, b, a]) { pos.push(v.x, v.y, v.z); col.push(endShade.r, endShade.g, endShade.b); }
+    }
+    // An apron of rock reaching out and down from the floor's edges near the
+    // mouth, so no sky shows where the flat floor meets the slope outside.
+    const edges = rings.map((ring, k) => {
+      const floorY = cave.axis[k * 2].y - cave.radius[k * 2] * FLOOR;
+      const low = ring.filter((v) => Math.abs(v.y - floorY) < 0.01);
+      if (low.length < 2) return null;
+      const c = cave.axis[k * 2];
+      // The two ends of the floor: furthest apart.
+      let a = low[0], b = low[1], far = 0;
+      for (const p of low) for (const q of low) if (p.distanceToSquared(q) > far) { far = p.distanceToSquared(q); a = p; b = q; }
+      return [a, b].map((v) => ({ v, out: v.clone().sub(c).setY(0).normalize() }));
+    });
+    for (let k = 0; k < Math.min(10, edges.length - 1); k++) {
+      const e0 = edges[k], e1 = edges[k + 1];
+      if (!e0 || !e1) continue;
+      for (let side = 0; side < 2; side++) {
+        // Pair each end of the floor with the nearer end on the next ring.
+        const p = e0[side], q = e1[0].v.distanceToSquared(p.v) < e1[1].v.distanceToSquared(p.v) ? e1[0] : e1[1];
+        const pd = p.v.clone().addScaledVector(p.out, 6).setY(p.v.y - 8), qd = q.v.clone().addScaledVector(q.out, 6).setY(q.v.y - 8);
+        for (const v of [p.v, q.v, qd, p.v, qd, pd]) { pos.push(v.x, v.y, v.z); col.push(floorC.r, floorC.g, floorC.b); }
+      }
+    }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
@@ -160,12 +189,13 @@ export class Caves {
     // Boulders along where the tunnel breaks out of the hillside hide the ragged edge of the hole.
     const stone = new THREE.MeshLambertMaterial({ color: rock.clone().multiplyScalar(1.2), flatShading: true });
     const rocks: THREE.BufferGeometry[] = [];
-    const addRock = (g: THREE.BufferGeometry, m: THREE.Object3D) => { m.updateMatrix(); rocks.push(g.toNonIndexed().applyMatrix4(m.matrix)); };
+    const addRock = (g: THREE.BufferGeometry, m: THREE.Object3D) => { m.updateMatrix(); rocks.push((g.index ? g.toNonIndexed() : g).applyMatrix4(m.matrix)); };
     let last = new THREE.Vector3(Infinity, 0, 0);
     for (let k = 0; k < Math.min(rings.length, 20); k++) {
       rings[k].forEach((v, j) => {
         const ground = this.island.heightAt(v.x, v.z);
-        if (Math.abs(ground - v.y) > 2.5 || v.distanceTo(last) < 5) return;
+        // Only round the top of the arch: lower down they'd block the way in.
+        if (v.y < cave.axis[k * 2].y + 2 || Math.abs(ground - v.y) > 2.5 || v.distanceTo(last) < 5) return;
         last = v.clone();
         const b = new THREE.Object3D();
         b.position.copy(v);
@@ -231,16 +261,41 @@ export class Caves {
     return null;
   }
 
-  /** Is this point (on the terrain) inside a tunnel? The terrain leaves a hole there. */
-  holeAt(x: number, y: number, z: number): boolean {
+  /**
+   * For the terrain: if this point of the ground is inside a tunnel, where on
+   * the tunnel's wall to move it to (so the hillside meets the tunnel with no
+   * gap). Null if it isn't inside one.
+   */
+  carve(x: number, y: number, z: number): THREE.Vector3 | null {
     for (const cave of this.list) {
       if (x < cave.box.min.x || x > cave.box.max.x || z < cave.box.min.z || z > cave.box.max.z) continue;
-      for (let i = 0; i < Math.min(cave.axis.length, 30); i++) {
+      // Only the first stretch of tunnel comes near the surface.
+      let best = -1, bestD = Infinity;
+      const n = Math.min(cave.axis.length - 1, 40);
+      for (let i = 0; i <= n; i++) {
         const a = cave.axis[i];
-        if ((a.x - x) ** 2 + (a.y - y) ** 2 + (a.z - z) ** 2 < (cave.radius[i] * 1.02) ** 2) return true;
+        const d = (a.x - x) ** 2 + (a.y - y) ** 2 + (a.z - z) ** 2;
+        if (d < bestD) { bestD = d; best = i; }
       }
+      const c = cave.axis[best], r = cave.radius[best];
+      const floor = c.y - r * FLOOR;
+      const ahead = cave.axis[Math.min(best + 1, cave.axis.length - 1)], behind = cave.axis[Math.max(best - 1, 0)];
+      const along = ahead.clone().sub(behind).normalize();
+      // How far out from the middle of the tunnel, across it (not along it).
+      const out = new THREE.Vector3(x - c.x, y - c.y, z - c.z);
+      const t = out.dot(along);
+      // Past either end of the tunnel isn't inside it (in front of the mouth is open air).
+      if ((best === 0 && t < 0) || Math.abs(t) > STEP * 1.5) continue;
+      out.addScaledVector(along, -t);
+      if (out.length() >= r || y < floor) continue;
+      if (out.lengthSq() < 1e-6) out.set(0, 1, 0);
+      const wall = c.clone().addScaledVector(out.normalize(), r * 1.01);
+      // Keep the along-the-tunnel position, so neighbouring points stay in order.
+      wall.addScaledVector(along, new THREE.Vector3(x - c.x, y - c.y, z - c.z).dot(along));
+      if (wall.y < floor) wall.y = floor - 0.4; // tucked just under the tunnel's floor
+      return wall;
     }
-    return false;
+    return null;
   }
 
   /** Caves that reach into a square of the map (for the terrain). */

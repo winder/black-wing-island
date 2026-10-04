@@ -111,6 +111,7 @@ export class Player {
   /** Go into (or, with null, out of) an Interior, standing at `at`. */
   enterIndoors(indoors: Indoors | null, at: THREE.Vector3, yaw: number) {
     this.indoors = indoors;
+    this.heldAt = null; // whatever was holding on is left behind
     this.position.copy(at);
     this.position.y = indoors ? indoors.floorAt(at.x, at.z) : this.island.heightAt(at.x, at.z);
     this.yaw = yaw;

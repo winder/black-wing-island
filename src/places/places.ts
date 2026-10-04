@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Blueprint, Builder, CastleLook, Part, buildingMaterial as mat, monsterCastle, rng } from '../build/blueprints';
 import { footprintHeights } from '../build/buildings';
+import { Gate } from '../build/gates';
 import { MonsterKind } from '../monsters/monster';
 import { Biome } from '../world/biomes';
 import { Collider, box } from '../world/collide';
@@ -71,6 +72,8 @@ export class Places {
   /** Dungeons whose Gold Hoard has been taken. */
   readonly hoards = new Set<string>();
   private models = new Map<string, THREE.Group>();
+  /** Each Portal's gates, which swing open as you come near. */
+  private gates = new Map<string, Gate>();
 
   constructor(private island: Island, avoid: { x: number; z: number }[]) {
     const taken: { x: number; z: number }[] = [];
@@ -127,7 +130,7 @@ export class Places {
   private blueprint(kind: PlaceKind, biome: Biome, seed: number, owned: boolean): Blueprint {
     const stone = BIOME_STONE[biome];
     if (kind === 'castle') {
-      const look: CastleLook = { stone, roof: '#2a2226', banner: owned ? PLAYER_BANNER : MONSTER_BANNER };
+      const look: CastleLook = { stone, roof: '#2a2226', banner: owned ? PLAYER_BANNER : MONSTER_BANNER, portal: true };
       return monsterCastle(seed, look);
     }
     return dungeonEntrance(seed, stone);
@@ -138,16 +141,30 @@ export class Places {
     this.models.get(p.id)?.removeFromParent();
     const bp = this.blueprint(p.kind, p.biome, p.seed, this.owned.has(p.id));
     const g = mergeParts([...bp.parts, plinthFor(p, this.island)]);
-    // The doorway: a deep black opening you can see from far off.
+    // The doorway: wooden gates in front of deep black darkness.
     if (bp.portal) {
-      const door = new THREE.Mesh(new THREE.BoxGeometry(11, 15, 2), new THREE.MeshBasicMaterial({ color: '#050304' }));
-      door.position.copy(bp.portal).add(new THREE.Vector3(0, 7.5, 0.6));
-      g.add(door);
+      const [w, h] = p.kind === 'castle' ? [12, 16] : [12.4, 18];
+      const dark = new THREE.Mesh(new THREE.BoxGeometry(w, h, 2), new THREE.MeshBasicMaterial({ color: '#050304' }));
+      dark.position.copy(bp.portal).add(new THREE.Vector3(0, h / 2, 1.2));
+      const gate = new Gate(w, h, p.kind === 'castle');
+      gate.group.position.copy(bp.portal);
+      const old = this.gates.get(p.id);
+      if (old) gate.setOpen(old.open);
+      this.gates.set(p.id, gate);
+      g.add(dark, gate.group);
     }
     g.position.set(p.x, p.y, p.z);
     g.rotation.y = p.rot;
     this.models.set(p.id, g);
     this.group.add(g);
+  }
+
+  /** Swing gates open when the dragon comes near, shut when it leaves. */
+  update(dt: number, at: THREE.Vector3) {
+    for (const p of this.list) {
+      const near = Math.hypot(p.portal.x - at.x, p.portal.z - at.z) < 70 && Math.abs(at.y - p.y) < 60;
+      this.gates.get(p.id)?.update(dt, near);
+    }
   }
 
   isOwned(id: string) { return this.owned.has(id); }
@@ -232,7 +249,7 @@ function mergeParts(parts: Part[]): THREE.Group {
   }
   const group = new THREE.Group();
   for (const [material, geos] of byMat) {
-    const merged = mergeGeometries(geos.map((g) => g.toNonIndexed()));
+    const merged = mergeGeometries(geos.map((g) => (g.index ? g.toNonIndexed() : g)));
     if (merged) group.add(new THREE.Mesh(merged, material));
     geos.forEach((g) => g.dispose());
   }

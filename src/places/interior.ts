@@ -92,7 +92,7 @@ export class Layout {
       if (this.at(i, j) && !corridor.some(([ci, cj]) => ci === i && cj === j)) return null;
     }
     for (const [i, j] of corridor) { this.open[j * G + i] = 1; this.height[j * G + i] = 20; }
-    this.carve(room, kind === 'boss' ? 48 : kind === 'side' ? 24 : 34);
+    this.carve(room, kind === 'boss' ? 56 : kind === 'side' ? 24 : 34);
     return room;
   }
 }
@@ -126,7 +126,10 @@ export class Interior implements Indoors {
   private col: number[] = [];
 
   constructor(seed: number, readonly theme: Theme, stone: string) {
-    this.layout = new Layout(seed, theme === 'castle' ? 7 : 8);
+    // Some seeds can't fit the great hall; try the next until one does.
+    let layout = new Layout(seed, theme === 'castle' ? 7 : 8);
+    for (let k = 1; !layout.rooms.some((m) => m.kind === 'boss') && k < 50; k++) layout = new Layout(seed + k * 7919, theme === 'castle' ? 7 : 8);
+    this.layout = layout;
     const r = rng(seed + 99);
     const t = THEME[theme];
     const tint = new THREE.Color(stone);
@@ -282,6 +285,14 @@ export class Interior implements Indoors {
   ceilingAt(x: number, z: number) {
     const { i, j, open } = this.cellOf(x, z);
     return open ? ORIGIN.y + this.layout.height[j * G + i] : ORIGIN.y + 20;
+  }
+
+  /** Standing at the near end of the great hall, looking at the Boss (for testing). */
+  hallView() {
+    const centre = roomCenter(this.layout.boss), start = roomCenter(this.layout.start);
+    const toward = centre.clone().sub(start).setY(0).normalize();
+    const reach = (Math.min(this.layout.boss.w, this.layout.boss.d) * CELL) / 2 - 8;
+    return { pos: centre.clone().addScaledVector(toward, -reach), yaw: Math.atan2(-toward.x, -toward.z) };
   }
 
   limitCamera(eye: THREE.Vector3, cam: THREE.Vector3) {

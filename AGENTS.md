@@ -145,7 +145,7 @@ PAGE=tools/dragon.html npx tsx tools/shot.ts out.png "anim=walk&t=1[&cam=x,y,z,l
 [KEYS=KeyE] npx tsx tools/bench.ts [seconds] [query]   # frame-time benchmark on the real GPU (Radeon 780M via --use-angle=gl-egl)
 ```
 
-`?debug` in the URL skips the title screen and exposes `window.game`. Add `&spawn=wolf&dist=60` to put a monster (snail, wolf, sandSnake, yeti, lavaWorm, kraken) in front of the dragon. `PORT=5174` points `tools/shot.ts` at another dev server. `&rich` gives 999 of every material; `&mouse` makes mouse clicks work without capturing the mouse (for headless tests).
+`?debug` in the URL skips the title screen and exposes `window.game`. **Teleport instead of travelling:** `&goto=<spot>` starts at a spot, and in game (with `?debug` or `?dev`) the \` key opens a clickable teleport panel. Spots: `home`, `castle-1`..`castle-6` and `dungeon-2`/`-3`/`-4` (outside the door), `castle-4:boss` (in the Boss hall), `cave-0`..`cave-11` (outside the mouth), `cave-3:chamber`; `window.game.goto(spot)` does the same, and `window.game.spots()` lists them. Add `&spawn=wolf&dist=60` to put a monster (snail, wolf, sandSnake, yeti, lavaWorm, kraken) in front of the dragon. `PORT=5174` points `tools/shot.ts` at another dev server. `&rich` gives 999 of every material; `&mouse` makes mouse clicks work without capturing the mouse (for headless tests).
 
 ## Architecture Overview
 
